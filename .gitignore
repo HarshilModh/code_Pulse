@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.pem
+GITHUB_PRIVATE_KEY_PATH.pem
+graphify-out/
+.env.local

@@ -1,0 +1,30 @@
+{
+  "name": "code_pulse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@octokit/app": "^16.1.2",
+    "@prisma/client": "^6.19.3",
+    "@prisma/config": "^7.7.0",
+    "bullmq": "^5.73.3",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "ioredis": "^5.10.1",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.5",
+    "openai": "^6.34.0",
+    "prisma": "^6.19.3",
+    "socket.io": "^4.8.3"
+  }
+}

@@ -1,0 +1,72 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+model User {
+  id        String   @id
+  email     String   @unique
+  plan      String   @default("free")
+  repoLimit Int      @default(3)
+  createdAt DateTime @default(now())
+  repos     Repo[]
+}
+
+model Repo {
+  id             String         @id @default(cuid())
+  githubRepoId   Int            @unique
+  owner          String
+  name           String
+  installationId Int
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  createdAt      DateTime       @default(now())
+  snapshots      Snapshot[]
+  fileAnalyses   FileAnalysis[]
+}
+
+model Snapshot {
+  id          String   @id @default(cuid())
+  repoId      String
+  repo        Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  commitSha   String
+  healthScore Float
+  complexity  Float
+  vulnCount   Int
+  deadCode    Float
+  coverage    Float
+  driftScore  Float
+  createdAt   DateTime @default(now())
+
+  @@index([repoId, createdAt])
+}
+
+model FileAnalysis {
+  id         String                       @id @default(cuid())
+  repoId     String
+  repo       Repo                         @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  snapshotId String?
+  filePath   String
+  complexity Float                        @default(0)
+  isDead     Boolean                      @default(false)
+  driftScore Float?
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime                     @default(now())
+
+  @@unique([repoId, filePath])
+  @@index([repoId])
+}
+
+model DigestLog {
+  id      String   @id @default(cuid())
+  repoId  String
+  sentAt  DateTime @default(now())
+  summary Json
+}
