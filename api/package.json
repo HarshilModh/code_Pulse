@@ -15,9 +15,11 @@
   "license": "ISC",
   "dependencies": {
     "@octokit/app": "^16.1.2",
+    "@octokit/rest": "^22.0.1",
     "@prisma/client": "^6.19.3",
     "@prisma/config": "^7.7.0",
     "bullmq": "^5.73.3",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "ioredis": "^5.10.1",

@@ -44,9 +44,7 @@ export const processComplexity = async (job) => {
                     complexity,
                     snapshotId: null,
                     driftScore: null,
-                    embedding: null,
                     isDead: false,
-
                 }
             })
             results.push({ filePath, complexity });

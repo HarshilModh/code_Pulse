@@ -93,7 +93,7 @@ export const processDeadCode = async (job) => {
         await prisma.fileAnalysis.upsert({
           where: { repoId_filePath: { repoId, filePath } },
           update: { isDead },
-          create: { repoId, filePath, isDead, snapshotId: null, driftScore: null, embedding: null, complexity: 0 },
+          create: { repoId, filePath, isDead, snapshotId: null, driftScore: null, complexity: 0 },
         });
 
         results.push({ filePath, isDead, deadExports });

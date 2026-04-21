@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import Redis from 'ioredis';
+import cors from 'cors';
 import webhookRouter from './routes/webhook.js';
 import reposRouter from './routes/repos.js';
 import dotenv from 'dotenv';
@@ -10,6 +11,8 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
+
+app.use(cors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:3001' }));
 
 // Capture rawBody BEFORE any parsing — required for HMAC verification
 app.use((req, res, next) => {

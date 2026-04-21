@@ -12,12 +12,16 @@
   "license": "ISC",
   "dependencies": {
     "@octokit/app": "^16.1.2",
+    "@octokit/rest": "^22.0.1",
     "@prisma/client": "^7.7.0",
     "bullmq": "^5.73.4",
     "dotenv": "^17.4.1",
     "escomplex": "^2.0.0-alpha",
+    "esprima": "^4.0.1",
     "ioredis": "^5.10.1",
+    "node-cron": "^4.2.1",
     "openai": "^6.34.0",
+    "resend": "^6.12.2",
     "ts-prune": "^0.10.3"
   }
 }

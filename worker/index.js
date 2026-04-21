@@ -5,7 +5,7 @@ import { processVuln } from './workers/vuln.js';
 import { processCoverage } from './workers/coverage.js';
 import { processDrift } from './workers/drift.js';
 import { processAggregator } from './workers/aggregator.js';
-import Redis from 'ioredis';           
+import { startDigestCron } from './digest/cron.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,13 +13,7 @@ dotenv.config();
 const connection = { url: process.env.REDIS_URL };
 
 const workerConfig = { connection, concurrency: 5 };
-const subscriber=new Redis(process.env.REDIS_URL);
-subscriber.subscribe('codepulse:health-update');
-subscriber.on('message', (channel, message) => {
-  const data = JSON.parse(message);
-    io.emit('health-update', data);                                                                                                                                                     
-    console.log(`[socket] health-update for repo ${data.repoId} — score ${data.healthScore?.toFixed(1)}`);
-  });     
+
 const workers = [
   new Worker('complexity-queue', processComplexity, workerConfig),
   new Worker('deadcode-queue',   processDeadCode,   workerConfig),
@@ -50,3 +44,6 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 console.log('[worker] All workers started');
+
+// Start the weekly digest cron
+startDigestCron();

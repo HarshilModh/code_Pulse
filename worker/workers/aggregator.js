@@ -42,7 +42,7 @@ export const processAggregator = async (job) => {
     }));  
     return {healthScore,snapshotId:snapshot.id}                                                   
     } catch (error) {
-      console.log(error);
+      console.error('[aggregator] Fatal error:', error.message);
       throw error;
     }
 }
