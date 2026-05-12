@@ -1,4 +1,4 @@
-import { getFileContent } from "../../api/services/octokit.js";
+import { fetchFile } from "../lib/fetchFile.js";
 import { storeWorkerResult } from '../resultStore.js';
 import { Queue } from 'bullmq';
 import { execFile } from 'child_process';
@@ -15,7 +15,7 @@ export const processVuln = async (job) => {
     console.log(`[vuln] Checking vulnerabilities for ${owner}/${repoName}`);
 
     // Vulnerability scanning requires package-lock.json, not individual source files
-    const lockContent = await getFileContent(installationId, owner, repoName, 'package-lock.json', commitSha);
+    const lockContent = await fetchFile(job.data, 'package-lock.json');
 
     let vulnCounts = { critical: 0, high: 0, moderate: 0, low: 0, total: 0 };
 

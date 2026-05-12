@@ -1,4 +1,4 @@
-import { getFileContent } from '../../api/services/octokit.js';
+import { fetchFile } from '../lib/fetchFile.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
 import { Queue } from 'bullmq';
@@ -31,7 +31,7 @@ export const processCoverage = async (job) => {
 
   for (const lcovPath of LCOV_PATHS) {
     try {
-      const content = await getFileContent(installationId, owner, repoName, lcovPath, ref);
+      const content = await fetchFile(job.data, lcovPath);
       if (!content) continue;
       coverageRatio = parseLcov(content);
       if (coverageRatio !== null) {

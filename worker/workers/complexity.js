@@ -1,4 +1,4 @@
-import { getFileContent } from '../../api/services/octokit.js';
+import { fetchFile } from '../lib/fetchFile.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
 import { Queue } from 'bullmq';
@@ -16,7 +16,7 @@ export const processComplexity = async (job) => {
     for (const filePath of jsFiles) {
         try {
             // 3. Fetch file content from GitHub
-            const content = await getFileContent(installationId, owner, repoName, filePath, ref);
+            const content = await fetchFile(job.data, filePath)
             if (!content) continue;
 
             // 4. Run escomplex
@@ -27,26 +27,26 @@ export const processComplexity = async (job) => {
                 ? report.functions.reduce((sum, fn) => sum + fn.cyclomatic, 0) / report.functions.length
                 : 1;
 
-            await prisma.fileAnalysis.upsert({
-                where: {
-                    repoId_filePath: {
-                        repoId,
-                        filePath,
-                    }
-                },
-                update: {
-                    complexity,
-
-                },
-                create: {
-                    repoId,
-                    filePath,
-                    complexity,
-                    snapshotId: null,
-                    driftScore: null,
-                    isDead: false,
-                }
-            })
+                                                                 
+            // Upsert the file-level record and get its ID for FunctionMetric FK                                                                   
+            const fileAnalysis = await prisma.fileAnalysis.upsert({
+                where: { repoId_filePath: { repoId, filePath } },                                                                                    
+                update: { complexity },                           
+                create: { repoId, filePath, complexity, snapshotId: null, driftScore: null, isDead: false },                                         
+            });  
+            // Replace function metrics on every run — delete old rows first so re-runs stay clean                                                 
+            await prisma.functionMetric.deleteMany({ where: { fileAnalysisId: fileAnalysis.id } });
+                                                                                                                                               
+            if (report.functions.length > 0) {                                                                                                     
+                await prisma.functionMetric.createMany({
+                data: report.functions.map(fn => ({                                                                                                
+                fileAnalysisId: fileAnalysis.id,              
+                name:       fn.name ?? '(anonymous)',
+                endLine:    fn.lineEnd ?? fn.line ?? 0,
+                cyclomatic: fn.cyclomatic,
+                })),
+            });
+            }
             results.push({ filePath, complexity });
 
         } catch (err) {
@@ -55,20 +55,22 @@ export const processComplexity = async (job) => {
     }
 
     const finalReport = {
-        worker: 'complexity',
-        repoId,
-        commitSha,
-        avgComplexity: results.length > 0
-            ? results.reduce((sum, r) => sum + r.complexity, 0) / results.length
-            : 0,
+      worker: 'complexity',
+      repoId,
+      commitSha,
+      avgComplexity: results.length > 0
+        ? results.reduce((sum, r) => sum + r.complexity, 0) / results.length
+        : 0,
+      // files array consumed by aggregator.emitFindings to generate complexity Findings
+      files: results,
     };
 
     const { complete, results: allResults } = await storeWorkerResult(repoId, commitSha, 'complexity', finalReport);
 
     if (complete) {
-        const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
-        await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
-        console.log(`[complexity] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
+      const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
+      await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
+      console.log(`[complexity] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
     }
 
     return finalReport;

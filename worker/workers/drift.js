@@ -1,4 +1,4 @@
-import { getFileContent } from "../../api/services/octokit.js";
+import { fetchFile } from "../lib/fetchFile.js";
 import prisma from "../../api/lib/prisma.js";
 import { storeWorkerResult } from "../resultStore.js";
 import {embedText} from "../../api/services/embed.js";
@@ -12,7 +12,7 @@ export const processDrift=async(job)=>{
         let flaggedFiles=0;
         for(const filePath of js_Files){
             try{
-                const content=await getFileContent(installationId,owner,repoName,filePath,ref);
+                const content=await fetchFile(job.data,filePath);
                 if(!content) continue;
                 const embedding=await embedText(content);
                 const similar = await prisma.$queryRaw`                                                                                                                                               

@@ -1,4 +1,5 @@
-import { getFileContent, getRepoTree } from '../../api/services/octokit.js';
+import { fetchFile } from '../lib/fetchFile.js';
+import { fetchRepoTree } from '../lib/fetchRepoTree.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
 import { Queue } from 'bullmq';
@@ -53,7 +54,7 @@ export const processDeadCode = async (job) => {
 
   try {
     // 1. Get full repo file tree so we can build the import graph
-    const allPaths = await getRepoTree(installationId, owner, repoName, ref);
+    const allPaths = await fetchRepoTree(job.data);
     const jsPaths = allPaths.filter(p => JS_TS.test(p));
 
     // 2. Fetch all JS/TS sources (cap at 300 files to stay within rate limits)
@@ -61,7 +62,7 @@ export const processDeadCode = async (job) => {
     const sources = await Promise.all(
       fetchPaths.map(async p => ({
         path: p,
-        src: await getFileContent(installationId, owner, repoName, p, ref) ?? '',
+        src: await fetchFile(job.data, p) ?? '',
       }))
     );
 
@@ -79,7 +80,7 @@ export const processDeadCode = async (job) => {
     for (const filePath of changedJs) {
       try {
         const entry = sources.find(s => s.path === filePath);
-        const src = entry?.src ?? await getFileContent(installationId, owner, repoName, filePath, ref) ?? '';
+        const src = entry?.src ?? await fetchFile(job.data, filePath) ?? '';
 
         const exported = parseExports(src);
         const deadExports = [...exported].filter(name => !allImportedNames.has(name));

@@ -19,7 +19,18 @@ export async function fanOut(payload) {
   await Promise.all(
     Object.values(queues).map(q => q.add('analyze', payload, defaultJobOptions))
   );
+  
   console.log(`[queue] Fanned out job for repo ${payload.repoId}`);
 }
 
-export { queues };
+export async function fanOutPublic(payload) {
+  const publicPayload={...payload,source:'public_url',installationId:null};
+  await Promise.all(
+    Object.values(queues).map(q => q.add('analyze', publicPayload, defaultJobOptions))
+  );
+
+  console.log(`[queue] Fanned out public job for repo ${payload.repoId}`);
+}
+
+
+export { queues };  

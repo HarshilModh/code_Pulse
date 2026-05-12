@@ -4,3 +4,4 @@ node_modules/
 GITHUB_PRIVATE_KEY_PATH.pem
 graphify-out/
 .env.local
+CLAUDE.md

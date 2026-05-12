@@ -14,6 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@clerk/backend": "^3.4.1",
     "@octokit/app": "^16.1.2",
     "@octokit/rest": "^22.0.1",
     "@prisma/client": "^6.19.3",
@@ -25,7 +26,7 @@
     "ioredis": "^5.10.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.5",
-    "openai": "^6.34.0",
+    "openai": "^6.35.0",
     "prisma": "^6.19.3",
     "socket.io": "^4.8.3"
   }

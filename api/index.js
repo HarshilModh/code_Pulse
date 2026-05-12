@@ -1,10 +1,25 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import {requireClerk} from './middleware/requireClerk.js';
 import Redis from 'ioredis';
 import cors from 'cors';
 import webhookRouter from './routes/webhook.js';
 import reposRouter from './routes/repos.js';
+import analyzeRouter from './routes/analyze.js';
+import installRouter from './routes/install.js';
+import demoRouter from './routes/demo.js';
+import insightsRouter from './routes/insights.js';
+import chatRouter from './routes/chat.js';
+import rootCauseRouter from './routes/Agents/root_Cause.js';
+import debateRouter from './routes/Agents/debate.js';
+import tourRouter from './routes/Agents/tour.js';
+import findingsRouter from './routes/findings.js';
+import filesRouter from './routes/files.js';
+import apiKeysRouter from './routes/apiKeys.js';
+import settingsRouter from './routes/settings.js';
+import badgeRouter from './routes/badge.js';
+import searchRouter from './routes/search.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -39,10 +54,23 @@ app.set('io', io);
 
 // Routes
 app.get('/', (req, res) => res.json({ status: 'ok' }));
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-app.use('/webhook', webhookRouter);
-app.use('/api', reposRouter);
-
+app.use('/webhook', webhookRouter);                                                                                                                                                   
+app.use('/install', installRouter);          // public — no Clerk (GitHub redirects here)
+app.use('/api', requireClerk, reposRouter);                                                                                                                                           
+app.use('/api', requireClerk, analyzeRouter);                                                                                                                                         
+app.use('/api', requireClerk, demoRouter);   
+app.use('/api/snapshots', requireClerk, insightsRouter);
+app.use('/api', requireClerk, chatRouter);
+app.use('/api', requireClerk, rootCauseRouter);
+app.use('/api', requireClerk, debateRouter);
+app.use('/api', requireClerk, tourRouter);
+app.use('/api', requireClerk, findingsRouter);
+app.use('/api', requireClerk, filesRouter);
+app.use('/api', requireClerk, apiKeysRouter);
+app.use('/api', requireClerk, settingsRouter);
+app.use('/api/public', badgeRouter);                   // public — no auth, not under /api (README embeds)
+app.use('/api', requireClerk, searchRouter);
+app.use("/api/public", reposRouter); // for GitHub App readme links — public endpoint for fetching repo+snapshot by owner/name
 // Socket.IO
 io.on('connection', socket => {
   console.log('[socket] Dashboard connected:', socket.id);

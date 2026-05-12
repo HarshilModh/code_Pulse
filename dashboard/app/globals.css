@@ -1,19 +1,602 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   CodePulse — modern minimal + intentional color
+   ============================================================================
+   Light, warm canvas. White surfaces with soft shadows + 1px borders.
+   ONE brand: indigo → violet, used for emphasis and CTAs only.
+   FIVE semantic accents tied to meaning (complexity, vulns, coverage, etc.).
+   Color earns its way in.
+   ============================================================================ */
+
 :root {
-  --background: #09090b; /* zinc-950 */
-  --foreground: #f4f4f5; /* zinc-50 */
+  /* Surfaces */
+  --canvas: #FAFAF9;          /* warm off-white */
+  --canvas-2: #F4F4F5;        /* very pale tint */
+  --surface: #FFFFFF;
+  --surface-2: #F5F5F4;
+  --surface-3: #EEECE8;
+
+  /* Ink */
+  --ink: #0C0A09;
+  --ink-soft: #292524;
+  --ink-muted: #78716C;
+  --ink-subtle: #A8A29E;
+
+  /* Lines */
+  --rule: #E7E5E4;
+  --rule-strong: #D6D3D1;
+
+  /* Brand — emerald · teal · lime */
+  --brand: #059669;            /* emerald-600 */
+  --brand-hover: #047857;      /* emerald-700 */
+  --brand-light: #ECFDF5;      /* emerald-50 — soft background */
+  --brand-2: #0D9488;          /* teal-600 — gradient end */
+  --brand-3: #65A30D;          /* lime-600 — third accent */
+  --brand-3-light: #F7FEE7;    /* lime-50 */
+  --brand-glow: rgba(5, 150, 105, 0.35);
+
+  /* Semantic signal colors */
+  --signal-complexity: #D97706;    /* amber-600 */
+  --signal-complexity-bg: #FFFBEB; /* amber-50 */
+  --signal-vuln: #E11D48;          /* rose-600 */
+  --signal-vuln-bg: #FFF1F2;       /* rose-50 */
+  --signal-coverage: #0284C7;      /* sky-600 — shifted off emerald to avoid clash with brand */
+  --signal-coverage-bg: #F0F9FF;   /* sky-50 */
+  --signal-dead: #57534E;          /* stone-600 */
+  --signal-dead-bg: #F5F5F4;       /* stone-100 */
+  --signal-drift: #7C3AED;         /* violet-600 */
+  --signal-drift-bg: #F5F3FF;      /* violet-50 */
+
+  /* Status (contextual only) */
+  --positive: #15803D;
+  --negative: #B91C1C;
+  --warn: #B45309;
+
+  /* Soft shadows for depth — modern apps are not flat */
+  --shadow-soft: 0 1px 2px rgba(15, 14, 12, 0.04), 0 1px 3px rgba(15, 14, 12, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(15, 14, 12, 0.06), 0 2px 4px rgba(15, 14, 12, 0.04);
+  --shadow-hover: 0 12px 32px rgba(15, 14, 12, 0.10), 0 4px 8px rgba(15, 14, 12, 0.06);
+  --shadow-cta: 0 1px 2px rgba(5, 150, 105, 0.20), 0 8px 24px rgba(5, 150, 105, 0.25);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  /* The body background is now forced to dark mode */
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+
+.tnum         { font-variant-numeric: tabular-nums; }
+.font-display { font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
+.font-tech    { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+
+/* Brand gradient text — used for italic emphasis word in headlines */
+.brand-gradient {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Soft hero halo — used as a background wash behind hero / CTA */
+.hero-halo {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(5, 150, 105, 0.16), transparent 65%),
+    radial-gradient(ellipse 70% 50% at 85% 20%, rgba(13, 148, 136, 0.13), transparent 55%),
+    radial-gradient(ellipse 50% 50% at 15% 35%, rgba(5, 150, 105, 0.10), transparent 55%);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GRID PATTERN — subtle dot grid behind hero for depth
+   ──────────────────────────────────────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, var(--rule-strong) 0.75px, transparent 0.75px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 70%);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   ANIMATED GRADIENT MESH — living blob behind the hero
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes mesh-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(30px, -20px) scale(1.05); }
+  66%  { transform: translate(-20px, 15px) scale(0.97); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.gradient-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.gradient-mesh::before,
+.gradient-mesh::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.7;
+  animation: mesh-drift 18s ease-in-out infinite;
+}
+.gradient-mesh::before {
+  width: 700px;
+  height: 700px;
+  top: -15%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(5, 150, 105, 0.25), transparent 65%);
+}
+.gradient-mesh::after {
+  width: 600px;
+  height: 600px;
+  bottom: -10%;
+  left: 5%;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.20), transparent 65%);
+  animation-delay: -6s;
+  animation-direction: reverse;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   FLOATING PARTICLES — tiny dots drifting up in the hero
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes float-up {
+  0%   { transform: translateY(0) scale(1);   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-800px) scale(0.5); opacity: 0; }
+}
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: float-up var(--dur, 12s) linear var(--delay, 0s) infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SCAN BEAM — horizontal sweep that drifts down through the hero
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes scan-sweep {
+  0%   { top: -10%; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 110%; opacity: 0; }
+}
+.scan-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 120px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(5, 150, 105, 0.04) 30%,
+    rgba(5, 150, 105, 0.06) 50%,
+    rgba(5, 150, 105, 0.04) 70%,
+    transparent 100%
+  );
+  animation: scan-sweep 8s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SCROLL REVEAL — elements fade up as they enter viewport
+   ──────────────────────────────────────────────────────────────────────────── */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.scroll-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Card variants */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: var(--rule-strong);
+  transform: translateY(-3px);
+}
+
+/* Signal card — left accent border + always-on tint + stronger glow on hover */
+.signal-card {
+  border-left: 3px solid var(--accent, var(--brand));
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent-glow, var(--surface)), var(--surface) 70%);
+}
+.signal-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 0% 50%, var(--accent-glow, transparent), transparent 50%);
+  opacity: 0.5;
+  transition: opacity 0.4s ease;
+}
+.signal-card:hover::before {
+  opacity: 1;
+}
+
+/* Agent card — glassmorphism on hover */
+.agent-card {
+  position: relative;
+  overflow: hidden;
+}
+.agent-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(5, 150, 105, 0.04) 90deg, transparent 180deg);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  animation: spin-slow 8s linear infinite;
+}
+.agent-card:hover::after {
+  opacity: 1;
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+
+/* Method card — shimmer stripe */
+.method-card {
+  position: relative;
+  overflow: hidden;
+}
+.method-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(5, 150, 105, 0.04) 50%, transparent 100%);
+  transition: left 0.6s ease;
+}
+.method-card:hover::after {
+  left: 100%;
+}
+
+/* FAQ card — expand on hover */
+.faq-card {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease, background 0.3s ease;
+}
+.faq-card:hover {
+  background: var(--brand-light);
+  border-color: rgba(5, 150, 105, 0.2);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   DARK SECTION — dramatic contrast break for CTA / special sections
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark-section {
+  background: #0C0A09;
+  color: #FAFAF9;
+}
+.dark-section .card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.dark-section .card-hover:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.dark-section .section-fade::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.06) 70%, transparent 100%);
+}
+.dark-section .hero-halo {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 50%, rgba(5, 150, 105, 0.25), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 30%, rgba(13, 148, 136, 0.15), transparent 60%);
+}
+
+/* Agent card on dark — border glow */
+.dark-section .agent-card {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+}
+.dark-section .agent-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 30px rgba(5, 150, 105, 0.15), 0 12px 40px rgba(0,0,0,0.3);
+}
+
+/* Dashboard preview tilt on hover */
+.dashboard-tilt {
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  perspective: 1200px;
+}
+.dashboard-tilt:hover {
+  transform: rotateX(2deg) rotateY(-1deg) scale(1.01);
+}
+
+/* Section header rise-in stagger */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise-in   { animation: rise-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.rise-in-1 { animation-delay: 0.05s; }
+.rise-in-2 { animation-delay: 0.10s; }
+.rise-in-3 { animation-delay: 0.15s; }
+.rise-in-4 { animation-delay: 0.20s; }
+
+/* Heartbeat — signature motif */
+@keyframes heartbeat {
+  0%, 28%, 100% { transform: scale(1); }
+  6%            { transform: scale(1.5); }
+  12%           { transform: scale(1); }
+  18%           { transform: scale(1.4); }
+  24%           { transform: scale(1); }
+}
+.heartbeat { animation: heartbeat 1.4s ease-in-out infinite; }
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 0.95; }
+  50%      { opacity: 0.55; }
+}
+.soft-pulse { animation: soft-pulse 2s ease-in-out infinite; }
+
+/* ECG line draw */
+@keyframes draw-pulse {
+  to { stroke-dashoffset: 0; }
+}
+.draw-pulse {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: draw-pulse 2.4s cubic-bezier(0.65, 0, 0.35, 1) 0.8s forwards;
+}
+
+/* Marquee */
+@keyframes marquee-slide {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-slide { animation: marquee-slide 50s linear infinite; }
+.marquee-pause:hover .marquee-slide { animation-play-state: paused; }
+
+/* Animated gradient on the brand emphasis */
+@keyframes gradient-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+.brand-gradient-animated {
+  background-size: 200% 200%;
+  animation: gradient-pan 6s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   CTA button glow pulse
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 1px 2px rgba(5, 150, 105, 0.20), 0 8px 24px rgba(5, 150, 105, 0.25); }
+  50%      { box-shadow: 0 1px 2px rgba(5, 150, 105, 0.25), 0 12px 36px rgba(5, 150, 105, 0.35); }
+}
+.cta-glow {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   STAT COUNTER — number pop on load
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes pop-in {
+  0%   { transform: scale(0.8); opacity: 0; }
+  60%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.stat-pop {
+  animation: pop-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   NOISE TEXTURE — subtle grain overlay for organic feel
+   ──────────────────────────────────────────────────────────────────────────── */
+.noise-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+/* ────────────────────────────────────────────────────────────────────────────
+   SECTION FLOW — gradient fades between sections instead of hard borders
+   ──────────────────────────────────────────────────────────────────────────── */
+.section-fade {
+  position: relative;
+}
+.section-fade::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--rule) 30%, var(--rule) 70%, transparent 100%);
+}
+
+/* Gradient bleed between canvas and canvas-2 sections */
+.section-blend-down {
+  position: relative;
+}
+.section-blend-down::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, transparent, var(--canvas-2));
+  pointer-events: none;
+}
+.section-blend-up {
+  position: relative;
+}
+.section-blend-up::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, transparent, var(--canvas));
+  pointer-events: none;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   MARKETING NAV
+   ──────────────────────────────────────────────────────────────────────────── */
+.marketing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: rgba(250, 250, 249, 0.85);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+
+
+/* Nav link */
+.nav-link {
+  position: relative;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.nav-link:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+::selection { background: var(--brand); color: white; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THREE-BLOB HERO BACKDROP — indigo + violet + cyan, soft-pulsing
+   The combination of three blurred orbs at different positions adds depth
+   without committing to a single decorative gradient. Intentionally NOT the
+   generic purple→cyan→pink that every AI landing ships with.
+   ──────────────────────────────────────────────────────────────────────────── */
+.hero-blobs { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.hero-blobs > .blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(160px);
+  opacity: 0.18;
+}
+.hero-blobs > .blob.indigo { width: 500px; height: 500px; top: -8%;   left: 10%;  background: radial-gradient(circle, var(--brand) 0%, transparent 65%); animation: blob-drift-1 22s ease-in-out infinite; }
+.hero-blobs > .blob.violet { width: 560px; height: 560px; top: 10%;   right: -6%; background: radial-gradient(circle, var(--brand-2) 0%, transparent 65%); animation: blob-drift-2 26s ease-in-out infinite; }
+.hero-blobs > .blob.cyan   { width: 420px; height: 420px; top: 38%;   left: 38%;  background: radial-gradient(circle, var(--brand-3) 0%, transparent 65%); opacity: 0.10; animation: blob-drift-3 28s ease-in-out infinite; }
+
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1);   }
+  50%      { transform: translate(40px, 30px) scale(1.07); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1);   }
+  50%      { transform: translate(-30px, 40px) scale(0.95); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1);   }
+  50%      { transform: translate(20px, -30px) scale(1.05); }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GLASS — used for the dashboard preview, floating insight cards, badges
+   ──────────────────────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 30px 60px -20px rgba(15, 14, 12, 0.18),
+    0 12px 24px -12px rgba(5, 150, 105, 0.10);
+}
+.glass-strong {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 12px 24px -8px rgba(15, 14, 12, 0.12);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GRADIENT BORDER — used on glass cards to add a hairline rainbow ring
+   ──────────────────────────────────────────────────────────────────────────── */
+.gradient-ring {
+  position: relative;
+  isolation: isolate;
+}
+.gradient-ring::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 50%, var(--brand-3) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   FLOATING INSIGHT CARD — used to overlay onto the dashboard preview
+   Tilts slightly + soft shadow + glass for that "pops out of the page" feel.
+   ──────────────────────────────────────────────────────────────────────────── */
+.float-card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px -12px rgba(15, 14, 12, 0.18), 0 8px 16px -8px rgba(15, 14, 12, 0.08);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.float-card:hover { transform: translateY(-3px) rotate(0deg); }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THREE-COLOR GRADIENT TEXT (richer than two-color)
+   ──────────────────────────────────────────────────────────────────────────── */
+.tri-gradient {
+  background: linear-gradient(90deg, var(--brand-3) 0%, var(--brand) 50%, var(--brand-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   BLINKING CURSOR — terminal feel for monospace inputs
+   ──────────────────────────────────────────────────────────────────────────── */
+@keyframes blink-cursor { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.blink-cursor { animation: blink-cursor 1.05s steps(1) infinite; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SLIGHT CARD TILT (used on float-cards to give the page asymmetric energy)
+   ──────────────────────────────────────────────────────────────────────────── */
+.tilt-l { transform: rotate(-1.6deg); }
+.tilt-r { transform: rotate(1.4deg); }

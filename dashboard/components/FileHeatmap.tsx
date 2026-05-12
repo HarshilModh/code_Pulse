@@ -37,22 +37,22 @@ export default function FileHeatmap({ snapshots }: { snapshots: Snapshot[] }) {
       .attr('height', cellSize)
       .attr('rx', 5)
       .attr('fill', d => colorScale(d.complexity))
-      .attr('opacity', 0.75)
-      .attr('stroke', d => colorScale(d.complexity))
-      .attr('stroke-opacity', 0.4)
+      .attr('opacity', 0.85)
+      .attr('stroke', '#E7E5E4')
+      .attr('stroke-width', 1)
       .style('cursor', 'pointer')
       .style('transition', 'opacity 120ms')
       .on('mouseover', function(event, d) {
         d3.select(this).attr('opacity', 1)
         tip.style('opacity', '1')
-          .html(`<div style="font-weight:600;color:#fff">${d.commitSha.slice(0, 7)}</div><div style="color:#a1a1aa;margin-top:2px">Complexity: <span style="color:#fff;font-weight:500">${d.complexity.toFixed(2)}</span></div>`)
+          .html(`<div style="font-weight:600;color:#0C0A09">${d.commitSha.slice(0, 7)}</div><div style="color:#78716C;margin-top:2px">Complexity: <span style="color:#0C0A09;font-weight:500">${d.complexity.toFixed(2)}</span></div>`)
       })
       .on('mousemove', (event) => {
         tip.style('left', `${event.clientX + 12}px`)
           .style('top', `${event.clientY - 16}px`)
       })
       .on('mouseout', function() {
-        d3.select(this).attr('opacity', 0.75)
+        d3.select(this).attr('opacity', 0.85)
         tip.style('opacity', '0')
       })
 
@@ -60,35 +60,35 @@ export default function FileHeatmap({ snapshots }: { snapshots: Snapshot[] }) {
     const tip = d3.select('body').append('div')
       .attr('id', 'heatmap-tooltip')
       .style('position', 'fixed')
-      .style('background', '#18181b')
-      .style('border', '1px solid #3f3f46')
+      .style('background', '#FFFFFF')
+      .style('border', '1px solid #E7E5E4')
       .style('border-radius', '8px')
       .style('padding', '8px 12px')
       .style('font-size', '12px')
-      .style('color', '#e4e4e7')
+      .style('color', '#0C0A09')
       .style('pointer-events', 'none')
       .style('opacity', '0')
       .style('z-index', '100')
-      .style('box-shadow', '0 10px 30px rgba(0,0,0,0.3)')
+      .style('box-shadow', '0 4px 12px rgba(15,14,12,0.08)')
       .style('transition', 'opacity 120ms')
 
   }, [snapshots])
 
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-6 h-full">
+    <div className="h-full">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-            <Grid3x3 className="w-4 h-4 text-amber-400" />
+          <div className="w-8 h-8 rounded-lg bg-[var(--signal-complexity-bg)] flex items-center justify-center">
+            <Grid3x3 className="w-4 h-4 text-[var(--signal-complexity)]" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Complexity Heatmap</h3>
-            <p className="text-[10px] text-zinc-500">per commit</p>
+            <h3 className="font-display text-[15px] font-medium text-[var(--ink)]">Complexity Heatmap</h3>
+            <p className="font-tech text-[10px] text-[var(--ink-muted)]">per commit</p>
           </div>
         </div>
       </div>
       <svg ref={ref} width="100%" height={180} />
-      <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-3 pt-3 border-t border-zinc-800">
+      <div className="flex items-center justify-between font-tech text-[10px] text-[var(--ink-muted)] mt-3 pt-3 border-t border-[var(--rule)]">
         <span>Low</span>
         <div className="flex-1 mx-2 h-1 rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" />
         <span>High</span>

@@ -23,28 +23,46 @@ router.post('/', verifyGithubSignature, async (req, res) => {
     commits.flatMap(c => [...(c.added || []), ...(c.modified || [])])
   )];
 
-  // Upsert system user (temporary until Clerk auth is wired)
-  await prisma.user.upsert({
-    where: { id: 'system' },
-    update: {},
-    create: {
-      id: 'system',
-      email: 'system@codepulse.dev',
-      plan: 'pro',
-      repoLimit: 9999,
-    },
-  });
+  const installationId = installation?.id ?? null;
+  const accountLogin = installation?.account?.login ?? null;
+
+  // 1. Try matching by githubLogin from the installation payload
+  let resolvedUser = accountLogin
+    ? await prisma.user.findFirst({ where: { githubLogin: accountLogin } })
+    : null;
+
+  // 2. Fall back: find the existing repo owner (avoids creating system duplicates)
+  if (!resolvedUser) {
+    const existingRepo = await prisma.repo.findFirst({
+      where: { githubRepoId: repository.id, NOT: { userId: 'system' } },
+      select: { userId: true },
+    });
+    if (existingRepo) {
+      resolvedUser = await prisma.user.findUnique({ where: { id: existingRepo.userId } });
+    }
+  }
+
+  const userId = resolvedUser?.id ?? 'system';
+
+  if (!resolvedUser) {
+    await prisma.user.upsert({
+      where: { id: 'system' },
+      update: {},
+      create: { id: 'system', email: 'system@codepulse.dev', plan: 'pro', repoLimit: 9999 },
+    });
+  }
 
   // Upsert the repo — create if first push, update installationId if repo exists
   const repo = await prisma.repo.upsert({
-    where: { githubRepoId: repository.id },
-    update: { installationId: installation.id },
+    where: { userId_githubRepoId: { userId, githubRepoId: repository.id } },
+    update: { installationId, source: 'github_app' },
     create: {
       githubRepoId: repository.id,
       owner: repository.owner.login,
       name: repository.name,
-      installationId: installation.id,
-      userId: 'system',
+      installationId,
+      source: 'github_app',
+      userId,
     },
   });
 
@@ -53,7 +71,8 @@ router.post('/', verifyGithubSignature, async (req, res) => {
     repoId: repo.id,
     owner: repository.owner.login,
     repoName: repository.name,
-    installationId: installation.id,
+    installationId,
+    source: 'github_app',
     commitSha,
     ref,
     changedFiles,
