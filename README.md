@@ -1,5 +1,11 @@
 <p align="center">
-  <img src="docs/hero-banner.png" width="100%" alt="CodePulse — Repository Health Intelligence" />
+  <img src="dashboard/public/icon.svg" width="72" alt="CodePulse" />
+</p>
+
+<h1 align="center">CodePulse</h1>
+<p align="center">
+  <strong>Repository Health Intelligence — powered by static analysis, vector search, and AI agents.</strong><br />
+  <sub>Complexity · Vulnerabilities · Dead Code · Coverage · Architectural Drift — one score, every push.</sub>
 </p>
 
 <p align="center">
