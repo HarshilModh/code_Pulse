@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="dashboard/public/icon.svg" width="72" alt="CodePulse" />
-</p>
-
 <h1 align="center">CodePulse</h1>
 <p align="center">
   <strong>Repository Health Intelligence — powered by static analysis, vector search, and AI agents.</strong><br />
