@@ -2,8 +2,10 @@ import { fetchFile } from '../lib/fetchFile.js';
 import { fetchRepoTree } from '../lib/fetchRepoTree.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
+import Redis from 'ioredis';
 import { Queue } from 'bullmq';
 
+const redis = new Redis(process.env.REDIS_URL);
 const JS_TS = /\.(js|jsx|ts|tsx)$/;
 
 // Extract named exports from source: export const/function/class/let/var foo
@@ -76,7 +78,13 @@ export const processDeadCode = async (job) => {
     const changedJs = changedFiles.filter(p => JS_TS.test(p));
     const results = [];
     let totalDeadExports = 0;
-
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+      repoId,
+      commitSha,
+      worker: 'deadcode',
+      phase: 'start',
+      totalFiles: changedJs.length,
+    }));
     for (const filePath of changedJs) {
       try {
         const entry = sources.find(s => s.path === filePath);
@@ -122,6 +130,14 @@ export const processDeadCode = async (job) => {
       console.log(`[deadcode] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
     }
 
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+      repoId,
+      commitSha,
+      worker: 'deadcode',
+      phase: 'done',
+      deadExports: totalDeadExports,
+      deadCodeRatio,
+    }));
     return finalReport;
   } catch (err) {
     console.error(`[deadcode] Fatal error:`, err.message);

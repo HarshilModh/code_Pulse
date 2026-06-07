@@ -1,5 +1,6 @@
 import { fetchFile } from "../lib/fetchFile.js";
 import { storeWorkerResult } from '../resultStore.js';
+import Redis from 'ioredis';
 import { Queue } from 'bullmq';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -9,8 +10,17 @@ import { join } from 'path';
 
 const execFileAsync = promisify(execFile);
 
+const redis = new Redis(process.env.REDIS_URL);
+
 export const processVuln = async (job) => {
     const { repoId, owner, repoName, installationId, commitSha } = job.data;
+
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+        repoId,
+        commitSha,
+        worker: 'vuln',
+        phase: 'start',
+    }));
 
     console.log(`[vuln] Checking vulnerabilities for ${owner}/${repoName}`);
 
@@ -63,6 +73,14 @@ export const processVuln = async (job) => {
         await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
         console.log(`[vuln] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
     }
+
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+        repoId,
+        commitSha,
+        worker: 'vuln',
+        phase: 'done',
+        ...vulnCounts,
+    }));
 
     return finalReport;
 };

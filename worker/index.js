@@ -6,6 +6,7 @@ import { processCoverage } from './workers/coverage.js';
 import { processDrift } from './workers/drift.js';
 import { processInsights } from './workers/insights.js';
 import { processAggregator } from './workers/aggregator.js';
+import { processCluster } from './workers/cluster.js';
 import { startDigestCron } from './digest/cron.js';
 import dotenv from 'dotenv';
 
@@ -22,7 +23,8 @@ const workers = [
   new Worker('coverage-queue',   processCoverage,   workerConfig),
   new Worker('drift-queue',      processDrift,      workerConfig),
   new Worker('aggregator-queue', processAggregator, workerConfig),
-  new Worker("insights-queue", processInsights, workerConfig),
+  new Worker('insights-queue', processInsights, workerConfig),
+  new Worker('cluster-queue',  processCluster,  workerConfig),
 ];
 
 // Log when each worker picks up a job

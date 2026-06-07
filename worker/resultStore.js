@@ -14,7 +14,10 @@ export const storeWorkerResult = async (repoId, commitSha, workerName, result) =
   const doneWorkers = REQUIRED_WORKERS.filter(w => raw[w]);
   
   if (doneWorkers.length === REQUIRED_WORKERS.length) {
-    // Parse all results
+    // Use GETDEL pattern — only the first caller wins, prevents duplicate aggregator runs
+    const deleted = await redis.del(key);
+    if (deleted === 0) return { complete: false, results: null }; // another worker already triggered aggregator
+
     const allResults = {};
     for (const [k, v] of Object.entries(raw)) {
       allResults[k] = JSON.parse(v);

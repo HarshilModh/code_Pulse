@@ -37,15 +37,15 @@
 <table>
   <tr>
     <td align="center" width="25%">
-      <img src="https://img.shields.io/badge/5-Analysis Workers-059669?style=for-the-badge" alt="" /><br />
-      <sub>Complexity · Vulnerabilities · Dead Code · Coverage · Drift</sub>
+      <img src="https://img.shields.io/badge/6-Analysis Workers-059669?style=for-the-badge" alt="" /><br />
+      <sub>Complexity · Vuln · Dead Code · Coverage · Drift · Clustering</sub>
     </td>
     <td align="center" width="25%">
       <img src="https://img.shields.io/badge/4-AI Agents-7c3aed?style=for-the-badge" alt="" /><br />
       <sub>Chat · Root Cause · Debate · Codebase Tour</sub>
     </td>
     <td align="center" width="25%">
-      <img src="https://img.shields.io/badge/13-Database Models-2563eb?style=for-the-badge" alt="" /><br />
+      <img src="https://img.shields.io/badge/14-Database Models-2563eb?style=for-the-badge" alt="" /><br />
       <sub>Prisma ORM + pgvector embeddings</sub>
     </td>
     <td align="center" width="25%">
@@ -92,6 +92,8 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
 
 | Feature | Description |
 |:---|:---|
+| 🌐 **Semantic Clustering** | Runs K-Means clustering on pgvector embeddings of code files to group semantically similar modules, automatically labeled/summarized by GPT. |
+| 💳 **Stripe Billing** | Full payment lifecycle integration using Stripe Checkout and Webhooks (Free, Pro, Team subscription tier limits). |
 | 🔍 **Semantic Code Search** | Files embedded with `text-embedding-3-small` + `pgvector`. The `⌘K` palette searches repos, findings, and code simultaneously. |
 | 📋 **Findings Tracker** | Auto-generated, deduplicated issues (vuln, complexity, drift, dead code) with full triage workflow — snooze, resolve, dismiss, comment. |
 | 📡 **Real-Time WebSocket** | Health scores push to all connected dashboards the instant analysis completes. Zero polling. |
@@ -115,7 +117,7 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
 ┌────────────────────────▼─────────────────────────────────────┐
 │                     API SERVER (Express 5)                    │
 │  Clerk JWT Auth · BullMQ Producer · Socket.IO Server         │
-│  OpenAI Chat + Tool-Calling · GitHub Octokit                 │
+│  OpenAI Chat + Tool-Calling · GitHub Octokit · Stripe · MCP  │
 └──────┬─────────────────┬──────────────────┬──────────────────┘
        │                 │                  │
 ┌──────▼──────┐  ┌───────▼───────┐  ┌───────▼───────┐
@@ -128,6 +130,7 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
                                      ├─ deadcode
                                      ├─ coverage
                                      ├─ drift
+                                     ├─ cluster
                                      ├─ aggregator
                                      └─ insights (AI)
 ```
@@ -135,8 +138,8 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
 ### Analysis Pipeline
 
 1. **Trigger** — A GitHub webhook (`push` event) or manual URL submission enqueues an analysis job.
-2. **Fan-out** — The API enqueues five parallel worker jobs: `complexity`, `vuln`, `deadcode`, `coverage`, and `drift`.
-3. **Aggregation** — Once all five complete, the `aggregator` worker computes the weighted health score, creates a `Snapshot`, emits `Finding` rows, and posts a PR comment.
+2. **Fan-out** — The API enqueues the metric analysis jobs: `complexity`, `vuln`, `deadcode`, `coverage`, and `drift` to calculate health statistics.
+3. **Aggregation** — Once those complete, the `aggregator` worker computes the weighted health score, creates a `Snapshot`, emits `Finding` rows, triggers the `cluster` job for semantic modular grouping, and posts a PR comment.
 4. **Insights** — The aggregator enqueues an `insights` job that sends the snapshot to GPT to generate top risks, improvement suggestions, and a recommended next action.
 5. **Broadcast** — The aggregator publishes a Redis Pub/Sub message, which the API relays to all connected dashboards via Socket.IO.
 
@@ -153,6 +156,8 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
 | **BullMQ + Redis** | Job queue for analysis workers |
 | **Socket.IO** | Real-time dashboard updates |
 | **OpenAI API** | Embeddings (`text-embedding-3-small`) + Chat completions with tool-calling |
+| **Stripe API / SDK** | Subscription billing and checkout sessions |
+| **ml-kmeans** | Vector clustering algorithm for file code structures |
 | **Octokit** | GitHub API access (App + public) |
 | **Clerk** | JWT authentication (backend verification) |
 | **Resend** | Transactional email delivery |
@@ -166,6 +171,7 @@ Four specialized agents, all streaming via SSE with OpenAI tool-calling and full
 | **TypeScript** | Type safety |
 | **Tailwind CSS 4** | Utility-first styling |
 | **Clerk** | Authentication (OAuth — GitHub, Google) |
+| **Stripe SDK** | Client-side integration for stripe checkout redirects |
 | **TanStack Query** | Server state management and caching |
 | **Recharts + D3** | Data visualization (health trends, scatter plots, heatmaps) |
 | **cmdk** | Command palette (⌘K) |
@@ -226,6 +232,8 @@ NEXT_PUBLIC_API_URL=http://localhost:3000/api
 NEXT_PUBLIC_GITHUB_APP_SLUG=your-app-slug
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
+NEXT_PUBLIC_STRIPE_PRICE_TEAM=price_...
 ```
 
 ### 4. Set up the database
@@ -278,6 +286,10 @@ The dashboard will be available at **http://localhost:3001** and the API at **ht
 | `DIRECT_URL` | API | PostgreSQL direct connection (for migrations) |
 | `REDIS_URL` | API, Worker | Redis connection string |
 | `OPENAI_API_KEY` | API, Worker | OpenAI API key for embeddings + chat |
+| `STRIPE_SECRET_KEY` | API | Stripe secret key for payment processing |
+| `STRIPE_WEBHOOK_SECRET` | API | Webhook secret to verify Stripe webhook signatures |
+| `STRIPE_PRICE_PRO` | API | Price ID for the Pro subscription tier |
+| `STRIPE_PRICE_TEAM` | API | Price ID for the Team subscription tier |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Dashboard | Clerk publishable key |
 | `CLERK_SECRET_KEY` | API, Dashboard | Clerk secret key for JWT verification |
 | `NODE_ENV` | All | `development` or `production` |
@@ -309,6 +321,8 @@ code_Pulse/
 │   │   ├── apiKeys.js            # API key management
 │   │   ├── install.js            # GitHub App installation callback
 │   │   ├── insights.js           # AI-generated snapshot insights
+│   │   ├── stripe.js             # Stripe checkout & webhook endpoints
+│   │   ├── clusters.js           # Semantic grouping endpoints
 │   │   └── Agents/
 │   │       ├── debate.js         # Multi-round AI debate agent
 │   │       ├── root_Cause.js     # Root cause analysis agent
@@ -336,7 +350,8 @@ code_Pulse/
 │   │   ├── coverage.js           # Test coverage analysis
 │   │   ├── drift.js              # Architectural drift (pgvector embeddings)
 │   │   ├── aggregator.js         # Score aggregation + snapshot + findings
-│   │   └── insights.js           # AI insight generation per snapshot
+│   │   ├── insights.js           # AI insight generation per snapshot
+│   │   └── cluster.js            # Semantic grouping via K-Means + GPT
 │   ├── digest/
 │   │   ├── cron.js               # Weekly cron scheduler
 │   │   ├── sendDigest.js         # HTML digest email builder + Resend
@@ -394,12 +409,19 @@ All authenticated endpoints require a `Authorization: Bearer <clerk_jwt>` header
 | `POST` | `/api/analyze` | Trigger analysis for a repository URL |
 | `POST` | `/api/demo/fork` | Fork the demo repository for first-time users |
 
-### Analysis & Metrics
+### Analysis, Metrics & Semantic Map
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/repos/:id/snapshots` | Get snapshot history for a repository |
 | `GET` | `/api/snapshots/:id/insights` | Get AI-generated insights for a snapshot |
 | `GET` | `/api/repos/:id/files` | Get file-level analysis data |
+| `GET` | `/api/repos/:id/clusters` | Get semantic file clusters and edge relations for modular mapping |
+
+### Billing (Stripe)
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/stripe/checkout` | Create Stripe Checkout session for subscription tier upgrade |
+| `POST` | `/api/stripe/webhook` | Stripe public webhook for plan upgrades, lifecycle renewals, cancellations |
 
 ### Findings
 | Method | Endpoint | Description |
@@ -437,12 +459,13 @@ All authenticated endpoints require a `Authorization: Bearer <clerk_jwt>` header
 
 ## Database Schema
 
-The application uses **13 models** managed by Prisma:
+The application uses **14 models** managed by Prisma:
 
-- **User** — Clerk-synced user with plan and repo limit
+- **User** — Clerk-synced user with plan levels and repo limits, and Stripe metadata
 - **Repo** — GitHub repository (supports App installs and public URL analysis)
-- **Snapshot** — Point-in-time health score with all five metric dimensions
+- **Snapshot** — Point-in-time health score with all metric dimensions
 - **FileAnalysis** — Per-file complexity, dead code status, drift score, and pgvector embedding
+- **Cluster** — Semantic grouping of files computed via K-Means centroids, with OpenAI summaries
 - **FunctionMetric** — Per-function cyclomatic complexity within a file
 - **Finding** — Actionable issue (vuln, complexity, drift, dead code) with triage workflow
 - **FindingComment** — Threaded comments on findings

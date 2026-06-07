@@ -20,6 +20,8 @@ import apiKeysRouter from './routes/apiKeys.js';
 import settingsRouter from './routes/settings.js';
 import badgeRouter from './routes/badge.js';
 import searchRouter from './routes/search.js';
+import stripeRouter from './routes/stripe.js';
+import clustersRouter from './routes/clusters.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -29,8 +31,9 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:3001' }));
 
-// Capture rawBody BEFORE any parsing — required for HMAC verification
+// Stripe webhook needs raw bytes — skip JSON parsing for that route
 app.use((req, res, next) => {
+  if (req.path === '/api/stripe/webhook') return next();
   let data = '';
   req.on('data', chunk => { data += chunk; });
   req.on('end', () => {
@@ -70,6 +73,8 @@ app.use('/api', requireClerk, apiKeysRouter);
 app.use('/api', requireClerk, settingsRouter);
 app.use('/api/public', badgeRouter);                   // public — no auth, not under /api (README embeds)
 app.use('/api', requireClerk, searchRouter);
+app.use('/api', stripeRouter);
+app.use('/api', requireClerk, clustersRouter);                         // stripe webhook is public; checkout requires Clerk via middleware inside route
 app.use("/api/public", reposRouter); // for GitHub App readme links — public endpoint for fetching repo+snapshot by owner/name
 // Socket.IO
 io.on('connection', socket => {
@@ -78,11 +83,16 @@ io.on('connection', socket => {
 });
 
 const subscriber = new Redis(process.env.REDIS_URL);
-subscriber.subscribe('codepulse:health-update');
-subscriber.on('message', (_channel, message) => {
+subscriber.subscribe('codepulse:health-update', 'codepulse:worker-event');
+subscriber.on('message', (channel, message) => {
   const data = JSON.parse(message);
-  io.emit('health-update', data);
-  console.log(`[socket] health-update for repo ${data.repoId} — score ${data.healthScore?.toFixed(1)}`);
+    if (channel === 'codepulse:health-update') {
+      io.emit('health-update', data);
+      console.log(`[socket] health-update for repo ${data.repoId} — score ${data.healthScore?.toFixed(1)}`);
+    } else if (channel === 'codepulse:worker-event') {
+      io.emit('worker-event', data);
+      console.log(`[socket] worker-event: ${data.worker} ${data.phase} for repo ${data.repoId}`);
+    }
 });
 
 

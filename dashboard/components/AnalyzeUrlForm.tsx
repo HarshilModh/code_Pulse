@@ -31,8 +31,7 @@ export function AnalyzeUrlForm() {
       className="flex items-center gap-2 glass-strong gradient-ring rounded-[14px] p-1.5 transition-all w-full relative"
     >
       <div className="flex-1 min-w-0 flex items-center h-8 pl-3 bg-transparent">
-        <span className="font-tech text-[12px] text-zinc-400 shrink-0 select-none">
-          github.com/
+        <span className="font-tech text-[12px] text-zinc-400 shrink-0 select-none ">
         </span>
         <input
           value={url}

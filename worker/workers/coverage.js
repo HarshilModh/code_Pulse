@@ -2,7 +2,9 @@ import { fetchFile } from '../lib/fetchFile.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
 import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 
+const redis = new Redis(process.env.REDIS_URL);
 // Common paths where CI tools write lcov reports
 const LCOV_PATHS = [
   'coverage/lcov.info',
@@ -28,7 +30,13 @@ export const processCoverage = async (job) => {
   console.log(`[coverage] Checking coverage for ${owner}/${repoName}`);
 
   let coverageRatio = null;
-
+  await redis.publish('codepulse:worker-event', JSON.stringify({
+    repoId,
+    commitSha,
+    worker: 'coverage',
+    phase: 'start',
+    coverage: coverageRatio,
+  }));
   for (const lcovPath of LCOV_PATHS) {
     try {
       const content = await fetchFile(job.data, lcovPath);
@@ -44,7 +52,7 @@ export const processCoverage = async (job) => {
   }
 
   if (coverageRatio === null) {
-    console.log(`[coverage] No lcov report found for ${owner}/${repoName} — defaulting to 0`);
+    console.log(`[coverage] No lcov report found for ${owner}/${repoName} — coverage unknown`);
   }
 
   // Delta vs previous snapshot
@@ -64,7 +72,7 @@ export const processCoverage = async (job) => {
     worker: 'coverage',
     repoId,
     commitSha,
-    coverage: coverageRatio ?? 0,
+    coverage: coverageRatio,
     delta,
     hasLcov: coverageRatio !== null,
   };
@@ -76,6 +84,12 @@ export const processCoverage = async (job) => {
     await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
     console.log(`[coverage] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
   }
-
+  await redis.publish('codepulse:worker-event', JSON.stringify({
+    repoId,
+    commitSha,
+    worker: 'coverage',
+    phase: 'done',
+    coverage: coverageRatio,
+  }));
   return finalReport;
 };

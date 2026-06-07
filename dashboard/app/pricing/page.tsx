@@ -3,9 +3,44 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-                                                                                                  
+import { useAuth } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const PRICE_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO || '';
+const PRICE_TEAM = process.env.NEXT_PUBLIC_STRIPE_PRICE_TEAM || '';
+
 const PricingPage = () => {
-    const [annual, setAnnual] = useState(false);
+    const [loading, setLoading] = useState<string | null>(null);
+    const { getToken, isSignedIn } = useAuth();
+    const router = useRouter();
+
+    const handleUpgrade = async (priceId: string, planName: string) => {
+        if (!isSignedIn) { router.push('/sign-in'); return; }
+        setLoading(planName);
+        try {
+            const token = await getToken();
+            console.log('[pricing] fetching:', API_BASE, 'priceId:', priceId);
+            const res = await fetch(`${API_BASE}/stripe/checkout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ priceId }),
+            });
+            console.log('[pricing] response status:', res.status);
+            const data = await res.json();
+            console.log('[pricing] response data:', data);
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                console.error('[pricing] No URL returned:', data);
+                setLoading(null);
+            }
+        } catch (err) {
+            console.error(err);
+            setLoading(null);
+        }
+    };
+
     return (                                                                                                                                   
       <div className="w-full bg-[var(--canvas)]">                                                     
         
@@ -28,31 +63,10 @@ const PricingPage = () => {
         Free for public repos. Upgrade when you need AI agents, private repos, or your whole team.                                             
       </p>                                                                                                                                     
                                                                                                                                                
-      {/* Monthly / Annual toggle */}                                                                                                          
-      <div className="inline-flex items-center gap-3 bg-[var(--surface)] border border-[var(--rule)] rounded-full px-2 py-1.5">
-        <button                                                                                                                                
-          onClick={() => setAnnual(false)}                  
-          className={`text-[13px] font-medium rounded-full px-4 py-1.5 transition-all ${                                                       
-            !annual ? 'bg-[var(--brand)] text-white shadow-sm' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'                             
-          }`}                                                                                                                                  
-        >                                                                                                                                      
-          Monthly                                                                                                                              
-        </button>                                           
-        <button
-          onClick={() => setAnnual(true)}                                                                                                      
-          className={`inline-flex items-center gap-2 text-[13px] font-medium rounded-full px-4 py-1.5 transition-all ${
-            annual ? 'bg-[var(--brand)] text-white shadow-sm' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'                              
-          }`}                                               
-        >                                                                                                                                      
-          Annual                                            
-          <span className="font-tech text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--brand-light)] text-[var(--brand)]">
-            –20%                                                                                                                               
-          </span>
-        </button>                                                                                                                              
-      </div>                                                
+                                                
     </div>
   </section>    
-     <section className="px-6 sm:px-10 pb-24">                 
+     <section className="relative z-10 px-6 sm:px-10 pb-24">
     <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 items-start">                                                      
                                                                                                                                                
       {/* Free */}                                                                                                                             
@@ -103,7 +117,7 @@ const PricingPage = () => {
           <div className="font-tech text-[11px] uppercase tracking-[0.2em] text-[var(--brand)] mb-3">Pro</div>
           <div className="flex items-baseline gap-1 mb-2">                                                                                     
             <span className="font-display text-5xl font-medium text-[var(--ink)] tracking-tight">
-              ${annual ? '15' : '19'}                                                                                                          
+              $20
             </span>
             <span className="text-[13px] text-[var(--ink-muted)]">/ month</span>                                                               
           </div>                                            
@@ -128,13 +142,14 @@ const PricingPage = () => {
           ))}                                                                                                                                  
         </ul>                                               
 
-        <Link
-          href="#"
-          className="w-full text-center text-[13px] font-medium text-white rounded-full px-4 py-2.5 transition-all hover:brightness-110"
-            style={{ background: 'linear-gradient(135deg, var(--brand), var(--brand-2))', boxShadow: '0 1px 3px rgba(5,150,105,0.3), 0 4px 12px rgba(5,150,105,0.18)' }}                                                                                                                     
-        >                                                                                                                                      
-          Upgrade to Pro                                                                                                                       
-        </Link>                                             
+        <button
+          onClick={() => handleUpgrade(PRICE_PRO, 'pro')}
+          disabled={loading === 'pro'}
+          className="w-full text-center text-[13px] font-medium text-white rounded-full px-4 py-2.5 transition-all hover:brightness-110 disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, var(--brand), var(--brand-2))', boxShadow: '0 1px 3px rgba(5,150,105,0.3), 0 4px 12px rgba(5,150,105,0.18)' }}
+        >
+          {loading === 'pro' ? 'Redirecting…' : 'Upgrade to Pro'}
+        </button>                                             
       </div>
 
       {/* Team */}
@@ -143,7 +158,7 @@ const PricingPage = () => {
           <div className="font-tech text-[11px] uppercase tracking-[0.2em] text-[var(--ink-muted)] mb-3">Team</div>
           <div className="flex items-baseline gap-1 mb-2">                                                                                     
             <span className="font-display text-5xl font-medium text-[var(--ink)] tracking-tight">
-              ${annual ? '39' : '49'}                                                                                                          
+              $29
             </span>                                                                                                                            
             <span className="text-[13px] text-[var(--ink-muted)]">/ month</span>
           </div>                                                                                                                               
@@ -167,13 +182,13 @@ const PricingPage = () => {
           ))}                                                                                                                                  
         </ul>                                               
 
-        <Link
-          href="#"
-          className="w-full text-center text-[13px] font-medium text-[var(--ink)] border border-[var(--rule)] rounded-full px-4 py-2.5 
-  hover:border-[var(--rule-strong)] hover:bg-[var(--surface-2)] transition-all"                                                                
+        <button
+          onClick={() => handleUpgrade(PRICE_TEAM, 'team')}
+          disabled={loading === 'team'}
+          className="w-full text-center text-[13px] font-medium text-[var(--ink)] border border-[var(--rule)] rounded-full px-4 py-2.5 hover:border-[var(--rule-strong)] hover:bg-[var(--surface-2)] transition-all disabled:opacity-50"
         >
-          Upgrade to Team                                                                                                                      
-        </Link>                                             
+          {loading === 'team' ? 'Redirecting…' : 'Upgrade to Team'}
+        </button>                                             
       </div>                                                                                                                                   
    
     </div>                                                                                                                                     

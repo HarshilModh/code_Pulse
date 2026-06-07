@@ -1,9 +1,25 @@
 import { fetchFile } from '../lib/fetchFile.js';
 import prisma from '../../api/lib/prisma.js';
 import { storeWorkerResult } from '../resultStore.js';
+import Redis from 'ioredis';
 import { Queue } from 'bullmq';
-// @ts-ignore
-import escomplex from 'escomplex';
+// Regex-based cyclomatic complexity — works on JS/JSX/TS/TSX without a parser
+function calcComplexity(content) {
+  const stripped = content
+    .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+    .replace(/\/\/.*/g, '')              // line comments
+    .replace(/`[^`]*`/g, '""')          // template literals
+    .replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, '""')  // strings
+    .replace(/'[^'\\]*(?:\\.[^'\\]*)*'/g, "''");
+  const branches = /\bif\b|\belse\s+if\b|\bfor\b|\bwhile\b|\bdo\b|\bcase\b|\bcatch\b|\b\?\s*[^:]/g;
+  const logicalOps = /&&|\|\||\?\?/g;
+  const branchCount = (stripped.match(branches) ?? []).length;
+  const logicalCount = (stripped.match(logicalOps) ?? []).length;
+  return 1 + branchCount + logicalCount;
+}
+
+const redis = new Redis(process.env.REDIS_URL);
+
 export const processComplexity = async (job) => {
     const { repoId, owner, repoName, installationId, commitSha, ref, changedFiles } = job.data;
 
@@ -12,6 +28,14 @@ export const processComplexity = async (job) => {
 
     // 2. Filter JS/TS files only
     const jsFiles = changedFiles.filter(f => f.match(/\.(js|jsx|ts|tsx)$/));
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+        repoId,
+        commitSha,
+        worker: 'complexity',
+        phase: 'start',
+        fileProcessed: 0,
+        totalFiles: jsFiles.length,
+    }));    
 
     for (const filePath of jsFiles) {
         try {
@@ -19,34 +43,15 @@ export const processComplexity = async (job) => {
             const content = await fetchFile(job.data, filePath)
             if (!content) continue;
 
-            // 4. Run escomplex
-            const report = escomplex.analyse(content, { noCoreSize: true });
+            // 4. Regex-based cyclomatic complexity (works on JS/JSX/TS/TSX)
+            const complexity = calcComplexity(content);
 
-            // 5. Calculate average complexity
-            const complexity = report.functions.length > 0
-                ? report.functions.reduce((sum, fn) => sum + fn.cyclomatic, 0) / report.functions.length
-                : 1;
-
-                                                                 
-            // Upsert the file-level record and get its ID for FunctionMetric FK                                                                   
+            // Upsert the file-level record
             const fileAnalysis = await prisma.fileAnalysis.upsert({
-                where: { repoId_filePath: { repoId, filePath } },                                                                                    
-                update: { complexity },                           
-                create: { repoId, filePath, complexity, snapshotId: null, driftScore: null, isDead: false },                                         
-            });  
-            // Replace function metrics on every run — delete old rows first so re-runs stay clean                                                 
-            await prisma.functionMetric.deleteMany({ where: { fileAnalysisId: fileAnalysis.id } });
-                                                                                                                                               
-            if (report.functions.length > 0) {                                                                                                     
-                await prisma.functionMetric.createMany({
-                data: report.functions.map(fn => ({                                                                                                
-                fileAnalysisId: fileAnalysis.id,              
-                name:       fn.name ?? '(anonymous)',
-                endLine:    fn.lineEnd ?? fn.line ?? 0,
-                cyclomatic: fn.cyclomatic,
-                })),
+                where: { repoId_filePath: { repoId, filePath } },
+                update: { complexity },
+                create: { repoId, filePath, complexity, snapshotId: null, driftScore: null, isDead: false },
             });
-            }
             results.push({ filePath, complexity });
 
         } catch (err) {
@@ -72,6 +77,13 @@ export const processComplexity = async (job) => {
       await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
       console.log(`[complexity] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
     }
-
+    await redis.publish('codepulse:worker-event', JSON.stringify({
+        repoId,
+        commitSha,
+        worker: 'complexity',
+        phase: 'done',
+        fileProcessed: results.length,
+        totalFiles: jsFiles.length,
+    }));
     return finalReport;
 }

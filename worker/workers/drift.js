@@ -2,7 +2,10 @@ import { fetchFile } from "../lib/fetchFile.js";
 import prisma from "../../api/lib/prisma.js";
 import { storeWorkerResult } from "../resultStore.js";
 import {embedText} from "../../api/services/embed.js";
+import Redis from "ioredis";
 import { Queue } from "bullmq";
+
+const redis = new Redis(process.env.REDIS_URL);
 export const processDrift=async(job)=>{
     const {repoId,owner,repoName,installationId,commitSha,ref,changedFiles}=job.data;
         const driftThreshold=0.72;
@@ -10,6 +13,13 @@ export const processDrift=async(job)=>{
         const js_Files=changedFiles.filter(p=>JS_TS.test(p));   
         const results=[];
         let flaggedFiles=0;
+        await redis.publish('codepulse:worker-event', JSON.stringify({
+            repoId,
+            commitSha,
+            worker: 'drift',
+            phase: 'start',
+            totalFiles: js_Files.length,
+        }));
         for(const filePath of js_Files){
             try{
                 const content=await fetchFile(job.data,filePath);
@@ -71,6 +81,14 @@ export const processDrift=async(job)=>{
             await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });                                                                                
             console.log(`[drift] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);                                                                                       
         }                                                                                                                                                                                     
-                                                            
+        await redis.publish('codepulse:worker-event', JSON.stringify({
+            repoId,
+            commitSha,
+            worker: 'drift',
+            phase: 'done',
+            flaggedFiles,
+            totalFiles: js_Files.length,
+            driftRatio,
+        }));                                            
         return finalReport;  
 }

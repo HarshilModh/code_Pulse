@@ -11,33 +11,38 @@ datasource db {
 }
 
 model User {
-  id          String   @id
-  email       String   @unique
-  plan        String   @default("free")
-  repoLimit   Int      @default(3)
-  clerkId     String?  @unique
-  githubLogin String?
-  createdAt   DateTime @default(now())
-  repos       Repo[]
+  id                   String    @id
+  email                String    @unique
+  plan                 String    @default("free")
+  repoLimit            Int       @default(3)
+  clerkId              String?   @unique
+  githubLogin          String?
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?
+  planActiveUntil      DateTime?
+  createdAt            DateTime  @default(now())
+  repos                Repo[]
 }
 
 model Repo {
-  id             String         @id @default(cuid())
-  githubRepoId   Int
-  owner          String
-  name           String
-  installationId Int?
-  source         String         @default("github_app")
-  defaultBranch  String         @default("main")
-  isPublicDemo   Boolean        @default(false)
-  lastAnalyzedAt DateTime?
-  userId         String
-  user           User           @relation(fields: [userId], references: [id])
-  createdAt      DateTime       @default(now())
-  snapshots      Snapshot[]
-  fileAnalyses   FileAnalysis[]
-  settings       RepoSettings?    
-  findings       Finding[]
+  id                  String         @id @default(cuid())
+  githubRepoId        Int
+  owner               String
+  name                String
+  installationId      Int?
+  source              String         @default("github_app")
+  defaultBranch       String         @default("main")
+  isPublicDemo        Boolean        @default(false)
+  lastAnalyzedAt      DateTime?
+  lastClusteredCommit String?
+  userId              String
+  user                User           @relation(fields: [userId], references: [id])
+  createdAt           DateTime       @default(now())
+  snapshots           Snapshot[]
+  fileAnalyses        FileAnalysis[]
+  settings            RepoSettings?
+  findings            Finding[]
+  clusters            Cluster[]
   @@unique([userId, githubRepoId])
 }
 
@@ -73,7 +78,8 @@ model FileAnalysis {
   embedding  Unsupported("vector(1536)")?
   createdAt  DateTime                     @default(now())
   functionMetrics FunctionMetric[]
-
+  clusterId String?
+  cluster   Cluster? @relation("ClusterMembership", fields: [clusterId], references: [id])
   @@unique([repoId, filePath])
   @@index([repoId])
 }
@@ -186,4 +192,19 @@ model Finding {
     createdAt DateTime @default(now())
 
     @@index([userId])
+  }
+
+   model Cluster {
+    id         String         @id @default(cuid())
+    repoId     String
+    repo       Repo           @relation(fields: [repoId], references: [id], onDelete: Cascade)
+    snapshotId String         
+    label      String
+    summary    String
+    centroid   Unsupported("vector(1536)")
+    fileCount  Int
+    createdAt  DateTime       @default(now())
+    members    FileAnalysis[] @relation("ClusterMembership")
+    
+    @@index([repoId, snapshotId])
   }

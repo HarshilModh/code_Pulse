@@ -95,7 +95,7 @@ export default function Page() {
   const metrics = [
     { label: 'Complexity',    value: latest.complexity.toFixed(2), hint: 'avg cyclomatic' },
     { label: 'Vulnerabilities', value: String(latest.vulnCount),    hint: 'critical / high' },
-    { label: 'Coverage',      value: `${(latest.coverage * 100).toFixed(1)}%`, hint: 'lcov parsed' },
+    { label: 'Coverage',      value: latest.coverage < 0 ? 'N/A' : `${(latest.coverage * 100).toFixed(1)}%`, hint: latest.coverage < 0 ? 'no lcov found' : 'lcov parsed' },
     { label: 'Drift',         value: latest.driftScore.toFixed(2),  hint: 'cosine similarity' },
   ]
 

@@ -17,7 +17,7 @@ export const processInsights = async (job) => {
                 - Complexity: ${snapshot.complexity}
                 - Vulnerability Count: ${snapshot.vulnCount}
                 - Dead Code Percentage: ${snapshot.deadCode}%
-                - Test Coverage: ${snapshot.coverage}%
+                - Test Coverage: ${snapshot.coverage < 0 ? 'unknown (no lcov report found)' : `${(snapshot.coverage * 100).toFixed(1)}%`}
                 - Drift Score: ${snapshot.driftScore}
 
                 Return your response in JSON format with keys "topRisks" (array of strings), "improvements" (array of strings), and "nextAction" (string).`
