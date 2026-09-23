@@ -69,7 +69,8 @@ export async function postPRComment({ repoId, snapshotId }) {
       title: `Health Score: ${score} / 100 (${deltaStr})`,
       summary: body,
     },
-  }).catch(err => console.warn('[prComment] check run failed:', err.message))
+  }).then(() => console.log(`[prComment] check run posted — ${score} (${conclusion})`))
+    .catch(err => console.warn('[prComment] check run failed:', err.message))
 
   // 2. Find every open PR that includes this commit and post the markdown body as a comment.
   // listPullRequestsAssociatedWithCommit returns merged PRs too — filter to open only.
@@ -85,6 +86,11 @@ export async function postPRComment({ repoId, snapshotId }) {
       repo: repo.name,
       issue_number: pr.number,
       body,
-    }).catch(err => console.warn(`[prComment] comment on PR #${pr.number} failed:`, err.message))
+    }).then(() => console.log(`[prComment] comment posted on PR #${pr.number}`))
+     .catch(err => console.warn(`[prComment] comment on PR #${pr.number} failed:`, err.message))
+  }
+
+  if (prs.filter(p => p.state === 'open').length === 0) {
+    console.log('[prComment] no open PRs — check run only')
   }
 }

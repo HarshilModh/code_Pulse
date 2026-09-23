@@ -201,7 +201,7 @@ model Finding {
     snapshotId String         
     label      String
     summary    String
-    centroid   Unsupported("vector(1536)")
+    centroid   Unsupported("vector(1536)")?   // nullable: set via raw SQL after create — required Unsupported fields disable prisma.cluster.create()
     fileCount  Int
     createdAt  DateTime       @default(now())
     members    FileAnalysis[] @relation("ClusterMembership")

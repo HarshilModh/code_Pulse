@@ -1,0 +1,16 @@
+{
+  "name": "codepulse",
+  "version": "1.0.0",
+  "description": "Query codebase health, metrics, findings, and files from any MCP-compatible AI assistant.",
+  "transport": ["stdio", "sse"],
+  "bin": "server.js",
+  "tools": [
+    "find_repo",
+    "search_code",
+    "get_metrics",
+    "get_snapshot_history",
+    "get_findings",
+    "read_file",
+    "get_diff"
+  ]
+}

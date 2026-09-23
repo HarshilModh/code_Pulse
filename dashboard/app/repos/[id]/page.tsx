@@ -11,7 +11,7 @@ import WorkerProgress from '@/components/WorkerProgress'
 import FileHeatmap from '@/components/FileHeatmap'
 import DriftScatter from '@/components/DriftScatter'
 import InsightCards from '@/components/InsightCards'
-import ChatPannel from '@/components/ChatPannel'
+import ChatPannel from '@/components/ChatPanel'
 import RootCauseAgent from '@/components/RootCauseAgent'
 import CodebaseTour from '@/components/CodebaseTour'
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
@@ -119,6 +119,7 @@ export default function Page() {
           <Link href={`/repos/${id}/settings`} className="text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors">
             Settings
           </Link>
+          <Link href={`/repos/${id}/map`} className="text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors">Cluster Map</Link>
         </div>
       </div>
 

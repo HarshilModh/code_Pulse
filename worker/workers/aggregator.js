@@ -38,21 +38,27 @@ export const processAggregator = async (job) => {
   });
 
   await insightsQueue.add('insights', { snapshotId: snapshot.id });
+  const [{count:embeddedCount}]=await prisma.$queryRaw`
+      SELECT COUNT(*)::int AS count
+      FROM "FileAnalysis"
+      WHERE "repoId" = ${repoId} AND embedding IS NOT NULL
+  `;
 
-  const embeddedCount = await prisma.fileAnalysis.count({
-    where: { repoId, embedding: { not: null } },
-  });
-  if (embeddedCount >= 20) {
-    const clusterQueue = new Queue('cluster-queue', { connection: { url: process.env.REDIS_URL } });
-    await clusterQueue.add('cluster', { repoId, snapshotId: snapshot.id, commitSha });
-    console.log(`[aggregator] Enqueued cluster job — ${embeddedCount} embedded files`);
+  if(embeddedCount >= 20){ 
+      const clusterQueue = new Queue('cluster-queue', { connection: { url: process.env.REDIS_URL } });
+      await clusterQueue.add('cluster', { repoId, snapshotId: snapshot.id, commitSha });
+      console.log(`[aggregator] Enqueued cluster job — ${embeddedCount} embedded files`);
   }
   // Emit findings — deduplicated by (repoId, type, filePath) so re-runs don't create duplicates                                           
   await emitFindings({ repoId, results, snapshot });
-  // Post or update a PR comment if this snapshot is associated with a PR — only for GitHub App repos
-  await postPRComment({ repoId, snapShot: snapshot.id }).catch(err => {
-    console.error('[aggregator] Error posting PR comment:', err.message);
-  });
+  // Post PR comment only if the user has enabled it via the integrations toggle
+  const settings = await prisma.repoSettings.findUnique({ where: { repoId } });
+  const prEnabled = (settings?.alertRules ?? []).some(r => r.type === 'pr_comments' && r.enabled);
+  if (prEnabled) {
+    await postPRComment({ repoId, snapshotId: snapshot.id }).catch(err => {
+      console.error('[aggregator] Error posting PR comment:', err.message);
+    });
+  }
   console.log(`[aggregator] HealthScore: ${healthScore.toFixed(1)} — snapshot ${snapshot.id}`);                                                                                               
     await redis.publish('codepulse:health-update', JSON.stringify({
         repoId,                                                                                                                                                                             

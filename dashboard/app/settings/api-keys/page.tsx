@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
 import { getApiKeys, createApiKey, deleteApiKey } from '@/lib/api'
 import type { ApiKey } from '@/lib/schema'
-import { Key, Plus, Trash2, Copy, Check } from 'lucide-react'
+import { Key, Plus, Trash2, Copy, Check, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 
 export default function ApiKeysPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth()
@@ -69,6 +70,12 @@ export default function ApiKeysPage() {
             <p className="font-tech text-[11px] text-[var(--ink-muted)] mt-0.5">
               Authenticate MCP server calls — treat as passwords
             </p>
+            <Link
+              href="/docs/mcp"
+              className="inline-flex items-center gap-1 font-tech text-[11px] text-[var(--brand)] hover:underline mt-1"
+            >
+              MCP setup guide <ExternalLink className="w-3 h-3" />
+            </Link>
           </div>
         </div>
       </div>

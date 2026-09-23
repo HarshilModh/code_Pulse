@@ -3,6 +3,15 @@ import { embedText } from './embed.js';
 
 // ─── Tool implementations ────────────────────────────────────────────────────
 
+export async function findRepo({ owner, name }) {
+    const repo = await prisma.repo.findFirst({
+        where: { owner, name },
+        select: { id: true, owner: true, name: true, source: true, lastAnalyzedAt: true },
+    });
+    if (!repo) return { error: `Repo ${owner}/${name} not found. Make sure it has been analyzed.` };
+    return repo;
+}
+
 export async function searchCode({ repoId, query, k = 6 }) {
     const vector = await embedText(query);
     const results = await prisma.$queryRaw`
@@ -104,6 +113,19 @@ export async function getDiff({ repoId, commitSha, path }) {
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 export const tools = [
+    {
+        name: 'find_repo',
+        description: 'Look up a repo by owner and name to get its ID. Always call this first if you only know the repo name.',
+        parameters: {
+            type: 'object',
+            properties: {
+                owner: { type: 'string', description: 'GitHub owner/org name' },
+                name:  { type: 'string', description: 'Repository name' },
+            },
+            required: ['owner', 'name'],
+        },
+        execute: findRepo,
+    },
     {
         name: 'search_code',
         description: 'Semantic search across all files in a repo using embeddings. Returns the most relevant file paths.',

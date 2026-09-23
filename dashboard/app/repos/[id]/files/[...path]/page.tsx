@@ -195,12 +195,12 @@ export default function FileDetailPage() {
                   </div>
                   <span className="font-tech text-[11px] text-[var(--ink-muted)] w-10 text-right">{n.similarity}</span>
 
-                  {n.isDead && <Ghost className="w-3.5 h-3.5 text-[var(--ink-subtle)]" title="Dead code" />}
+                  {n.isDead && <Ghost className="w-3.5 h-3.5 text-[var(--ink-subtle)]" aria-label="Dead code" />}
                   {n.driftScore !== null && n.driftScore !== undefined && Number(n.driftScore) < 0.72 && (
-                    <Radar className="w-3.5 h-3.5 text-[var(--brand)]" title="Drifting" />
+                    <Radar className="w-3.5 h-3.5 text-[var(--brand)]" aria-label="Drifting" />
                   )}
                   {n.complexity > 10 && (
-                    <Zap className="w-3.5 h-3.5 text-[var(--signal-complexity)]" title="High complexity" />
+                    <Zap className="w-3.5 h-3.5 text-[var(--signal-complexity)]" aria-label="High complexity" />
                   )}
                 </div>
               </Link>

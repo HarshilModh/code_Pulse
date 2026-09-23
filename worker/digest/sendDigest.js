@@ -1,48 +1,65 @@
-                                                           
-  import { Resend } from 'resend'
-  import prisma from '../../api/lib/prisma.js'
-                                                                                                                                                         
-  const resend = new Resend(process.env.RESEND_API_KEY)
-                                                                                                                                                         
-  export async function sendDigest(repo) {                  
-    // 1. Get snapshots from last 7 days
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)                                                                                         
-    const snapshots = await prisma.snapshot.findMany({
-      where: { repoId: repo.id, createdAt: { gte: since } },                                                                                             
-      orderBy: { createdAt: 'asc' },                                                                                                                     
-    })
-                                                                                                                                                         
-    // 2. Skip if no activity                                                                                                                            
-    if (snapshots.length === 0) {
-      console.log(`[digest] ${repo.name} — no activity this week, skipping`)                                                                             
-      return                                                                                                                                             
-    }
-                                                                                                                                                         
-    // 3. Calculate summary                                 
-    const first = snapshots[0]
-    const last = snapshots[snapshots.length - 1]
-    const delta = last.healthScore - first.healthScore                                                                                                   
-   
-    // 4. Get drift outliers                                                                                                                             
-    const driftFiles = await prisma.fileAnalysis.findMany({ 
-      where: { repoId: repo.id, driftScore: { lt: 0.72 } },                                                                                              
-      orderBy: { driftScore: 'asc' },                                                                                                                    
-      take: 5,
-    })                                                                                                                                                   
-                                                            
-    // 5. Build HTML
-    const html = buildHtml({ repo, first, last, delta, snapshots, driftFiles })
-                                                                                                                                                         
-    // 6. Send email
-    await resend.emails.send({                                                                                                                           
-      from: process.env.DIGEST_FROM_EMAIL,                  
-      to: process.env.DIGEST_TO_EMAIL,                                                                                                                   
-      subject: `CodePulse weekly · ${repo.owner}/${repo.name} — ${last.healthScore.toFixed(1)}`,
-      html,                                                                                                                                              
-    })                                                      
-                                                                                                                                                         
-    // 7. Log it                                                                                                                                         
-    await prisma.digestLog.create({
+import { Resend } from 'resend'
+import prisma from '../../api/lib/prisma.js'
+
+// Lazy init — only instantiate when actually sending so missing key doesn't crash the worker on startup
+let resend = null;
+function getResend() {
+  if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
+  return resend;
+}
+
+export async function sendDigest(repo) {
+  // 1. Load per-repo settings to get recipients
+  const settings = await prisma.repoSettings.findUnique({ where: { repoId: repo.id } })
+
+  // Use DB recipients if configured, otherwise fall back to env var
+  const recipients = settings?.digestRecipients?.length
+    ? settings.digestRecipients
+    : process.env.DIGEST_TO_EMAIL ? [process.env.DIGEST_TO_EMAIL] : []
+
+  if (recipients.length === 0) {
+    console.log(`[digest] ${repo.owner}/${repo.name} — no recipients configured, skipping`)
+    return
+  }
+
+  // 2. Get snapshots from last 7 days
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const snapshots = await prisma.snapshot.findMany({
+    where: { repoId: repo.id, createdAt: { gte: since } },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  // 3. Skip if no activity
+  if (snapshots.length === 0) {
+    console.log(`[digest] ${repo.owner}/${repo.name} — no activity this week, skipping`)
+    return
+  }
+
+  // 4. Calculate summary
+  const first = snapshots[0]
+  const last = snapshots[snapshots.length - 1]
+  const delta = last.healthScore - first.healthScore
+
+  // 5. Get drift outliers
+  const driftFiles = await prisma.fileAnalysis.findMany({
+    where: { repoId: repo.id, driftScore: { lt: 0.72 } },
+    orderBy: { driftScore: 'asc' },
+    take: 5,
+  })
+
+  // 6. Build HTML
+  const html = buildHtml({ repo, first, last, delta, snapshots, driftFiles })
+
+  // 7. Send email to all recipients
+  await getResend().emails.send({
+    from: process.env.DIGEST_FROM_EMAIL,
+    to: recipients,
+    subject: `CodePulse weekly · ${repo.owner}/${repo.name} — ${last.healthScore.toFixed(1)}`,
+    html,
+  })
+
+  // 8. Log it
+  await prisma.digestLog.create({
       data: {                                                                                                                                            
         repoId: repo.id,                                    
         summary: {

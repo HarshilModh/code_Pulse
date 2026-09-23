@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import {requireClerk} from './middleware/requireClerk.js';
 import Redis from 'ioredis';
 import cors from 'cors';
+
 import webhookRouter from './routes/webhook.js';
 import reposRouter from './routes/repos.js';
 import analyzeRouter from './routes/analyze.js';
@@ -11,7 +12,7 @@ import installRouter from './routes/install.js';
 import demoRouter from './routes/demo.js';
 import insightsRouter from './routes/insights.js';
 import chatRouter from './routes/chat.js';
-import rootCauseRouter from './routes/Agents/root_Cause.js';
+import rootCauseRouter from './routes/Agents/root-cause.js';
 import debateRouter from './routes/Agents/debate.js';
 import tourRouter from './routes/Agents/tour.js';
 import findingsRouter from './routes/findings.js';
@@ -22,6 +23,7 @@ import badgeRouter from './routes/badge.js';
 import searchRouter from './routes/search.js';
 import stripeRouter from './routes/stripe.js';
 import clustersRouter from './routes/clusters.js';
+import prIntegrationRouter from './routes/integrations/pr.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -46,7 +48,7 @@ app.use((req, res, next) => {
     next();
   });
 });
-
+app.use(express.json());
 app.use((req, res, next) => {
   console.log(`[request] ${req.method} ${req.url}`);
   next();
@@ -71,10 +73,10 @@ app.use('/api', requireClerk, findingsRouter);
 app.use('/api', requireClerk, filesRouter);
 app.use('/api', requireClerk, apiKeysRouter);
 app.use('/api', requireClerk, settingsRouter);
+app.use('/api', requireClerk, clustersRouter);
 app.use('/api/public', badgeRouter);                   // public — no auth, not under /api (README embeds)
-app.use('/api', requireClerk, searchRouter);
+// app.use('/api', requireClerk, searchRouter);
 app.use('/api', stripeRouter);
-app.use('/api', requireClerk, clustersRouter);                         // stripe webhook is public; checkout requires Clerk via middleware inside route
 app.use("/api/public", reposRouter); // for GitHub App readme links — public endpoint for fetching repo+snapshot by owner/name
 // Socket.IO
 io.on('connection', socket => {

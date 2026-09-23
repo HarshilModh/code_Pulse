@@ -63,6 +63,7 @@ export function Nav() {
           <div className="hidden md:flex items-stretch">
             <NavLink href="/dashboard"         active={isActive('/dashboard')}>Dashboard</NavLink>
             <NavLink href="/findings"          active={isActive('/findings')}>Findings</NavLink>
+            <NavLink href="/docs/mcp"          active={isActive('/docs/mcp')}>MCP</NavLink>
             <NavLink href="/settings/api-keys" active={isActive('/settings')}>Settings</NavLink>
           </div>
         </Show>

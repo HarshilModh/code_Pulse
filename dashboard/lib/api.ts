@@ -180,18 +180,6 @@ export async function getPublicRepo(owner: string, name: string) {
       } | null
     }>                                                                                                                                                                                  
   } 
-export async function getClusters(repoId: string, token: string): Promise<{
-  clusters: {
-    id: string; label: string; summary: string; fileCount: number; createdAt: string
-    members: { id: string; filePath: string; complexity: number; driftScore: number | null; isDead: boolean }[]
-  }[]
-  edges: { source: string; target: string; weight: number }[]
-}> {
-  const { data } = await axios.get(`${API_URL}/repos/${repoId}/clusters`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  return data
-}
 
 export async function searchAll(q: string, token: string) {
     const res = await fetch(                                                                                                                                                            
@@ -205,3 +193,26 @@ export async function searchAll(q: string, token: string) {
       files:    { filePath: string; repoId: string }[]                                                                                                                                  
     }>                                                                                                                                                                                  
   }                                                        
+
+export async function getClusters(repoId: string, token: string): Promise<{
+    clusters: {
+      id: string
+      label: string
+      summary: string
+      fileCount: number
+      createdAt: string
+      members: {
+        id: string
+        filePath: string
+        complexity: number
+        driftScore: number | null
+        isDead: boolean
+      }[]
+    }[]
+    edges: { source: string; target: string; weight: number }[]
+  }> {
+    const { data } = await axios.get(`${API_URL}/repos/${repoId}/clusters`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return data
+}
