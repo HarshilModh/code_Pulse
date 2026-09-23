@@ -119,3 +119,86 @@ old jobs without `runId` still run.
   catch runs stuck in `QUEUED`.
 - If enqueueing fails part-way, some category jobs may already exist. They are skipped because
   the run is `FAILED`, but they still occupy a queue slot briefly.
+
+---
+
+## Step 2 — Safe-to-repeat results and aggregation
+
+**The key word: idempotent.** An operation is idempotent if doing it twice leaves the system
+in the same state as doing it once. Queues like BullMQ are *at-least-once*: a job can run more
+than once (retries, or a "stalled" job re-delivered after a worker crash). You can't make the
+queue deliver exactly once, so you make every handler safe to repeat.
+
+**What was wrong**
+
+- Category reports lived only in a Redis hash (with a 24h expiry), and the aggregator got its
+  input copied inside the job payload.
+- `snapshot.create` had no uniqueness rule, so a second aggregation made a second snapshot, a
+  second insights job, and possibly a second PR comment.
+- The aggregator job had **1 attempt**, so one brief DB error lost the snapshot forever.
+
+**What changed**
+
+| Change | Where |
+|---|---|
+| New table `CategoryResult` with `@@unique([runId, category])`. Each worker **upserts** its report there before touching the Redis hash. A duplicate delivery overwrites its own row. | [schema.prisma](api/prisma/schema.prisma), [runLifecycle.js](worker/lib/runLifecycle.js) `saveCategoryResult` |
+| `Snapshot.runId` — nullable, **unique**. The aggregator calls `upsertRunSnapshot(runId, …)` instead of `create`. | `upsertRunSnapshot` |
+| The aggregator reads its input from Postgres (`loadCategoryResults`), not the job payload. If a category is missing it throws, so BullMQ retries. | [aggregator.js](worker/workers/aggregator.js) |
+| Aggregator jobs now get `attempts: 5` + exponential backoff. The run is marked `FAILED` only on the **last** attempt (`isFinalAttempt`). | 5 worker handoffs, aggregator catch |
+| Follow-up jobs use `jobId = snapshot.id` (insights, cluster), so a re-run aggregation can't enqueue them twice. | aggregator |
+| PR comment: an **at-most-once claim** (`prCommentClaimedAt`) is written *before* posting. | `claimPrComment` |
+
+Findings were already safe: they upsert on `(repoId, type, filePath)`. Clustering deletes and
+rebuilds the repo's clusters, so repeating it is harmless.
+
+**Why this approach**
+
+- *Let the database enforce uniqueness.* Application code that says "check if it exists, then
+  insert" is a race: two callers can both see "not there". A `UNIQUE` constraint can't be raced.
+- *The Prisma `upsert` subtlety (good interview story).* With `update: {}`, Prisma runs
+  `SELECT` then `INSERT` — two statements, so it can still race. With a non-empty `update`
+  it sends one atomic `INSERT … ON CONFLICT ("runId") DO UPDATE`, and Postgres resolves the race.
+  Measured: 20 simultaneous calls with `update: {}` → **19 failed with P2002** (unique violation;
+  still 1 row, thanks to the constraint). With `upsertRunSnapshot` → **0 errors, 1 row**. The
+  `update: { commitSha }` is a deliberate no-op that exists only to get the atomic statement.
+- *At-least-once vs at-most-once, chosen per side effect.* Database writes are idempotent, so
+  they can safely be retried (at-least-once). A PR comment is a message to a human and can't be
+  un-sent, so it gets at-most-once: claim first, then post. The cost: if GitHub errors after the
+  claim, that run gets no comment. A missing comment is better than duplicate spam.
+- *Only the last attempt fails the run.* Otherwise attempt 1 failing would mark the run `FAILED`
+  while attempts 2–5 might still succeed.
+- *Postgres is the source of truth for results.* The aggregator no longer trusts a copy of the
+  results inside a job payload. It re-reads them, so any retry sees the current, durable state.
+
+**Alternatives rejected**
+
+- *Catch P2002 and re-read the row.* Works, but it's more code, and it still makes the losing
+  request do a failed insert. The atomic upsert makes the race a non-event.
+- *`INSERT … ON CONFLICT DO NOTHING` in raw SQL.* Also atomic, but `DO NOTHING` returns no row,
+  so we'd need a second query to get the existing `snapshot.id`. And the project rule is Prisma
+  for everything except vectors.
+- *A unique constraint on `(repoId, commitSha)` instead of `runId`.* That would forbid ever
+  re-analyzing the same commit (e.g. after the drift threshold changes). One snapshot **per run**
+  is the right unit.
+- *Dedupe the aggregator job itself with `jobId = runId`.* Coming in Step 3, where the handoff is
+  rewritten in one place. Step 2 makes aggregation safe *even if* it runs twice. Step 3 then makes
+  it rare.
+
+**How it was verified** (throwaway script, real Postgres + Redis, 16 checks, all pass)
+
+Duplicate category delivery → 1 row with the latest report. Aggregation twice in a row → same
+snapshot id, 1 snapshot, 1 insights job. Two aggregations at once → 1 snapshot. Missing category →
+attempt 1 leaves the run `RUNNING`, attempt 5 marks it `FAILED`. 3 simultaneous PR-comment claims →
+exactly 1 wins. 20 simultaneous snapshot upserts → 0 errors (control group: 19 of 20 fail). Legacy
+jobs without `runId` still work. Step 1's 16 checks were re-run and still pass.
+
+**Remaining limitations**
+
+- **The handoff is still the Redis hash**, so "lost aggregation" and "stuck forever" are still
+  possible (Step 3). Results are now safely in Postgres, which is what Step 3 needs.
+- BullMQ's `jobId` dedupe only works while the old job is still stored in Redis. These queues
+  don't set `removeOnComplete`, so completed jobs are kept and dedupe holds. If someone later adds
+  `removeOnComplete`, a re-run could enqueue insights again. The `Insight.snapshotId` unique rule
+  would then make that second job fail instead of duplicating data.
+- The at-most-once PR comment can be lost if GitHub fails right after the claim.
+- The 5 workers still create a new BullMQ `Queue` (a Redis connection) on every handoff (Step 3).

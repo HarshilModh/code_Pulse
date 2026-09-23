@@ -2,14 +2,21 @@ import {Queue} from 'bullmq';
 import prisma from '../../api/lib/prisma.js';
 import Redis from 'ioredis';
 import { postPRComment } from '../../api/services/prComment.js'
-import { markRunSucceeded, markRunFailed } from '../lib/runLifecycle.js';
+import { markRunSucceeded, markRunFailed, isFinalAttempt, loadCategoryResults, claimPrComment, upsertRunSnapshot } from '../lib/runLifecycle.js';
 const redis=new Redis(process.env.REDIS_URL);
 const insightsQueue=new Queue('insights-queue',{connection:redis});
 
 
 export const processAggregator = async (job) => {
-    const {runId,repoId,commitSha,owner,repoName,results}=job.data;
+    const {runId,repoId,commitSha,owner,repoName}=job.data;
     try {
+        // With a run, Postgres (CategoryResult) is the source of truth; the results embedded
+        // in the job payload are only used for legacy jobs enqueued before AnalysisRun existed.
+        const results = runId ? await loadCategoryResults(runId) : job.data.results;
+        const missing = ['complexity','vuln','deadcode','coverage','drift'].filter(c => !results[c]);
+        // Throwing lets BullMQ retry; the category rows are written before the handoff, so
+        // this should never fire — if it does, it's a bug worth failing loudly on.
+        if (missing.length) throw new Error(`missing category results: ${missing.join(', ')}`);
         const {complexity,vuln,deadcode,coverage,drift}=results;
         const complexityPenalty= Math.min((complexity.avgComplexity / 10) * 100, 100);     
         const vulnPenalty       = Math.min((vuln.critical ?? 0) * 10 + (vuln.high ?? 0) * 5 + (vuln.moderate ?? 0) * 2, 100);                                                                 
@@ -25,8 +32,7 @@ export const processAggregator = async (job) => {
             phase: 'calculating',
             healthScore,
         }));
-        const snapshot = await prisma.snapshot.create({                                                                                                                                       
-        data: {                                                 
+        const snapshotData = {
         repoId,
         commitSha,                                                                                                                                                                        
         healthScore,
@@ -34,11 +40,16 @@ export const processAggregator = async (job) => {
       vulnCount:  vuln.total ?? 0,                          
       deadCode:   deadcode.deadCodeRatio ?? 0,                                                                                                                                          
       coverage:   coverage.coverage ?? -1,
-      driftScore: drift.driftRatio ?? 0,                                                                                                                                                
-    },                                                                                                                                                                                  
-  });
+      driftScore: drift.driftRatio ?? 0,
+    };
+  // Keyed on the run: a second aggregation of the same run gets the existing snapshot back,
+  // so every later step (insights, cluster, findings) sees the same snapshot.id.
+  const snapshot = runId
+    ? await upsertRunSnapshot(runId, snapshotData)
+    : await prisma.snapshot.create({ data: snapshotData });
 
-  await insightsQueue.add('insights', { snapshotId: snapshot.id });
+  // jobId = snapshot.id: a re-run aggregation re-adds the same id, which BullMQ ignores
+  await insightsQueue.add('insights', { snapshotId: snapshot.id }, { jobId: snapshot.id });
   const [{count:embeddedCount}]=await prisma.$queryRaw`
       SELECT COUNT(*)::int AS count
       FROM "FileAnalysis"
@@ -47,7 +58,7 @@ export const processAggregator = async (job) => {
 
   if(embeddedCount >= 20){ 
       const clusterQueue = new Queue('cluster-queue', { connection: { url: process.env.REDIS_URL } });
-      await clusterQueue.add('cluster', { repoId, snapshotId: snapshot.id, commitSha });
+      await clusterQueue.add('cluster', { repoId, snapshotId: snapshot.id, commitSha }, { jobId: snapshot.id });
       console.log(`[aggregator] Enqueued cluster job — ${embeddedCount} embedded files`);
   }
   // Emit findings — deduplicated by (repoId, type, filePath) so re-runs don't create duplicates                                           
@@ -55,7 +66,8 @@ export const processAggregator = async (job) => {
   // Post PR comment only if the user has enabled it via the integrations toggle
   const settings = await prisma.repoSettings.findUnique({ where: { repoId } });
   const prEnabled = (settings?.alertRules ?? []).some(r => r.type === 'pr_comments' && r.enabled);
-  if (prEnabled) {
+  // Comments are visible to humans, so they get an at-most-once claim (see claimPrComment)
+  if (prEnabled && (!runId || await claimPrComment(runId))) {
     await postPRComment({ repoId, snapshotId: snapshot.id }).catch(err => {
       console.error('[aggregator] Error posting PR comment:', err.message);
     });
@@ -83,9 +95,8 @@ export const processAggregator = async (job) => {
     return {healthScore,snapshotId:snapshot.id}                                                   
     } catch (error) {
       console.error('[aggregator] Fatal error:', error.message);
-      // The aggregator job currently has a single attempt, so this failure is final.
-      // (Step 2 adds retries; then only the last attempt should mark the run FAILED.)
-      await markRunFailed(runId, error.message).catch(e => console.error('[aggregator] could not mark run FAILED:', e.message));
+      // Earlier attempts will be retried by BullMQ; only the last one ends the run
+      if (isFinalAttempt(job)) await markRunFailed(runId, error.message).catch(e => console.error('[aggregator] could not mark run FAILED:', e.message));
       throw error;
     }
 }

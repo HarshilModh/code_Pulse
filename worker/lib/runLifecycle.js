@@ -52,3 +52,53 @@ export async function markRunFailed(runId, error) {
     data: { status: 'FAILED', error: String(error).slice(0, 1000), finishedAt: new Date() },
   });
 }
+
+// BullMQ's attemptsMade counts attempts that already FAILED, so the attempt now running
+// is attemptsMade + 1. Used so only the LAST attempt records a permanent failure.
+export function isFinalAttempt(job) {
+  return job.attemptsMade + 1 >= (job.opts?.attempts ?? 1);
+}
+
+// Upsert on the (runId, category) unique rule: a retried or re-delivered category job
+// overwrites its own row instead of adding a second one. "Last write wins" is safe here
+// because every attempt analyzes the same commit.
+export async function saveCategoryResult(runId, category, report) {
+  // Round-trip through JSON so undefined fields / Dates become plain JSON Prisma accepts
+  const json = JSON.parse(JSON.stringify(report));
+  await prisma.categoryResult.upsert({
+    where: { runId_category: { runId, category } },
+    create: { runId, category, status: 'SUCCEEDED', report: json },
+    update: { status: 'SUCCEEDED', report: json, error: null },
+  });
+}
+
+// The aggregator's input: { complexity: report, deadcode: report, ... } read from Postgres.
+export async function loadCategoryResults(runId) {
+  const rows = await prisma.categoryResult.findMany({ where: { runId } });
+  return Object.fromEntries(rows.map(r => [r.category, r.report]));
+}
+
+// At-most-once guard for the PR comment. The claim is written BEFORE posting, and only one
+// caller can move prCommentClaimedAt from NULL to a timestamp. Trade-off: if posting fails
+// after the claim, the comment is never posted — a missing comment beats duplicate spam.
+export async function claimPrComment(runId) {
+  const { count } = await prisma.analysisRun.updateMany({
+    where: { id: runId, prCommentClaimedAt: null },
+    data: { prCommentClaimedAt: new Date() },
+  });
+  return count === 1;
+}
+
+// One snapshot per run, safe under concurrent aggregations.
+// Why the odd `update: { commitSha }` (a run's commitSha never changes, so it's a no-op):
+// Prisma only emits a single atomic `INSERT ... ON CONFLICT ("runId") DO UPDATE` when the
+// update clause is non-empty. With `update: {}` it falls back to SELECT-then-INSERT, and two
+// simultaneous aggregations can both see "no row" — the loser fails with P2002.
+// Only the first aggregation's numbers are kept; later ones read the same CategoryResults anyway.
+export async function upsertRunSnapshot(runId, data) {
+  return prisma.snapshot.upsert({
+    where: { runId },
+    create: { ...data, runId },
+    update: { commitSha: data.commitSha },
+  });
+}

@@ -1,10 +1,15 @@
 import Redis from 'ioredis';
+import { saveCategoryResult } from './lib/runLifecycle.js';
 
 const redis = new Redis(process.env.REDIS_URL);
 const REQUIRED_WORKERS = ['complexity', 'deadcode', 'vuln', 'coverage', 'drift'];
 const TTL = 86400; // 24 hours
 
-export const storeWorkerResult = async (repoId, commitSha, workerName, result) => {
+export const storeWorkerResult = async (repoId, commitSha, workerName, result, runId) => {
+  // Postgres first: the aggregator reads results from CategoryResult, not from this hash.
+  // (The hash still decides WHEN to aggregate until Step 3 replaces it.)
+  if (runId) await saveCategoryResult(runId, workerName, result);
+
   const key = `codepulse:results:${repoId}:${commitSha}`;
   await redis.hset(key, workerName, JSON.stringify(result));
   await redis.expire(key, TTL);

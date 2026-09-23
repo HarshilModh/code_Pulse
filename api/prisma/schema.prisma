@@ -71,6 +71,10 @@ model AnalysisRun {
   updatedAt  DateTime          @updatedAt
   startedAt  DateTime?
   finishedAt DateTime?
+  // Set BEFORE posting the PR comment, so a retried aggregation can't post it twice
+  prCommentClaimedAt DateTime?
+  snapshot        Snapshot?
+  categoryResults CategoryResult[]
 
   @@index([repoId, createdAt])
   // Step 3's periodic check looks for runs stuck in a status for too long
@@ -91,6 +95,11 @@ model Snapshot {
   createdAt    DateTime       @default(now())
   fileAnalyses FileAnalysis[]
   insight      Insight?
+  // One snapshot per run: the aggregator upserts on this, so running it twice is harmless.
+  // Nullable because snapshots created before AnalysisRun existed have no run
+  // (Postgres allows many NULLs under a UNIQUE constraint).
+  runId        String?        @unique
+  run          AnalysisRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
   
 
   @@index([repoId, createdAt])
@@ -239,3 +248,33 @@ model Finding {
     
     @@index([repoId, snapshotId])
   }
+
+enum AnalysisCategory {
+  complexity
+  deadcode
+  vuln
+  coverage
+  drift
+}
+
+enum CategoryStatus {
+  SUCCEEDED
+  FAILED     // written when a category's job exhausts its retries (Step 3)
+}
+
+// One row per (run, category): the durable replacement for the Redis results hash.
+// The unique rule means a re-delivered or retried category job overwrites its own row
+// instead of adding a second one.
+model CategoryResult {
+  id        String           @id @default(cuid())
+  runId     String
+  run       AnalysisRun      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  category  AnalysisCategory
+  status    CategoryStatus   @default(SUCCEEDED)
+  report    Json?            // the worker's finalReport; null when the category FAILED
+  error     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([runId, category])
+}
