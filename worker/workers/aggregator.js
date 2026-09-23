@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import { postPRComment } from '../../api/services/prComment.js'
 import { markRunSucceeded, markRunFailed, isFinalAttempt, loadCategoryResults, claimPrComment, upsertRunSnapshot } from '../lib/runLifecycle.js';
 import { CATEGORIES } from '../lib/queues.js';
+import { computeHealthScore } from '../lib/healthScore.js';
 const redis=new Redis(process.env.REDIS_URL);
 const insightsQueue=new Queue('insights-queue',{connection:redis});
 
@@ -33,13 +34,7 @@ export const processAggregator = async (job) => {
         }
         const results = Object.fromEntries(CATEGORIES.map(c => [c, rows[c].report]));
         const {complexity,vuln,deadcode,coverage,drift}=results;
-        const complexityPenalty= Math.min((complexity.avgComplexity / 10) * 100, 100);     
-        const vulnPenalty       = Math.min((vuln.critical ?? 0) * 10 + (vuln.high ?? 0) * 5 + (vuln.moderate ?? 0) * 2, 100);                                                                 
-        const deadcodePenalty   = (deadcode.deadCodeRatio ?? 0) * 100;                                                                                                                        
-        const coveragePenalty   = coverage.coverage !== null && coverage.coverage !== undefined ? (1 - coverage.coverage) * 100 : 0;                                                                                                                       
-        const driftPenalty      = (drift.driftRatio ?? 0) * 100;        
-        
-        const healthScore= Math.max(0, Math.min(100, 100 - (complexityPenalty * 0.25) - (vulnPenalty * 0.25) - (deadcodePenalty * 0.15) - (coveragePenalty * 0.20) - (driftPenalty * 0.15)));             
+        const healthScore = computeHealthScore(results);
         await redis.publish('codepulse:worker-event', JSON.stringify({
             repoId,
             commitSha,

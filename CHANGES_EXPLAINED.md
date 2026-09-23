@@ -341,3 +341,92 @@ The real `worker/index.js` was also booted and sent SIGTERM: it started, swept, 
   attempt analyzes the same commit, so the data would be equivalent.
 - The sweeper handles up to 50 runs per status per tick. A huge backlog of stuck runs clears over
   several ticks.
+
+---
+
+## Step 6 — Real tests
+
+**What was wrong:** both `test` scripts were `echo "Error: no test specified" && exit 1`. Every
+claim in Steps 1–3 was checked only by throwaway scripts.
+
+**What changed**
+
+- **Vitest** in `worker/` (`npm test`). `api/`'s `npm test` runs the same suite, which covers
+  `api/services/queue.js` too. One suite, one setup.
+- **The score formula moved into a pure function**, [worker/lib/healthScore.js](worker/lib/healthScore.js),
+  so it can be tested without a database. One fix on the way: a report missing `avgComplexity`
+  used to make the whole score `NaN`; it now counts as 0.
+- **Tests can never touch real data.** They use their own database `codepulse_test` and Redis DB
+  number 15. `test/testEnv.js` refuses to run unless the database is on a local host and its name
+  ends in `_test`, and Redis isn't db 0. `test/setup.js` then asks Postgres which database it is
+  *actually* connected to, in case an `.env` file won. Checked: pointing the tests at the dev DB,
+  at Redis db 0, or at a Neon hostname aborts before anything runs.
+- The test DB is migrated with the **same `prisma migrate deploy`** that production uses, before
+  the tests run, so the schema under test is the real one.
+
+**The 39 tests, in three layers**
+
+| Layer | File | Infra | What it covers |
+|---|---|---|---|
+| Unit (14) | `test/unit/healthScore.test.js` | none | Perfect → 100, worst → 0; complexity cap at avg 10; vuln points (critical 10 / high 5 / moderate 2, low ignored) and cap; coverage 0% / 50% / missing; dead code / drift weights; missing `avgComplexity` isn't NaN; 1,000 random inputs stay within [0, 100] |
+| Coordination (21) | `test/coordination/handoff.test.js` | **real Postgres**, fake queue | All **120** completion orders of the 5 categories hand off exactly once, only after the 5th. 5 simultaneous completions × 25: exactly one advancer. Failure before the last attempt records nothing; a later success counts; the final failure records `FAILED` and the run ends `FAILED`, not stuck. Duplicates, sequential and concurrent: 5 rows, 1 handoff. A failing duplicate can't overwrite a success. A duplicate after the finish is skipped. A slow duplicate that finishes after the handoff can't change frozen results. Aggregation twice, sequential and concurrent: 1 snapshot, 0 errors, 1 insights job. Only the final aggregator attempt fails the run. PR-comment claim: 1 winner of 10. Sweeper: all 5 stuck situations, plus sweeping twice is a no-op. |
+| Integration (4) | `test/integration/pipeline.test.js` | **real Postgres + Redis + BullMQ workers**, real API fan-out, real aggregator | Every category job delivered twice → 1 snapshot, 5 results, 1 insights job. Aggregation re-delivered after success plus late category duplicates → still the same single snapshot. Real BullMQ ignores a duplicate `jobId`. A category failing all 3 real retries → run `FAILED`, BullMQ `attemptsMade = 3`. |
+
+**Why a fake queue but a real database for coordination?** The races we care about are in SQL:
+the conditional `UPDATE`, `ON CONFLICT`, row locks. A mocked Prisma would have "passed" the
+broken `update: {}` upsert from Step 2. The queue, on the other hand, only needs one behavior
+(ignore a duplicate `jobId`), and faking it lets a test decide exactly which job finishes when,
+or pretend a job died. The integration test then checks that real BullMQ really behaves the way
+the fake assumes.
+
+**Do the tests catch the real bugs? (mutation check)** Each original bug was put back on purpose
+and the suite re-run. The files were restored afterwards and their checksums compared.
+
+| Bug re-introduced | Tests failing |
+|---|---|
+| `snapshot.create` instead of upsert (duplicate snapshots) | 4 |
+| Final attempt doesn't record `FAILED` (stuck forever) | 2 |
+| Handoff `UPDATE` without `status = 'RUNNING'` (double handoff) | 1 |
+| Upsert with `update: {}` (SELECT-then-INSERT race) | 1 |
+| Run advanced but aggregation never enqueued (lost aggregation) | 11 |
+| No result freeze after handoff | 1 *(0 at first — see below)* |
+
+The last row taught something: the first version of the suite did **not** catch it. The existing
+"duplicate after finish" test is stopped by the wrapper's entry check, so it never reaches the
+freeze. I added a test with a slow duplicate that starts while the run is `RUNNING` and finishes
+after the snapshot exists. Lesson: a passing test only counts if it fails when the code is wrong.
+
+**What these tests prove**
+
+- The coordination logic (handoff, idempotent writes, final-attempt failure, sweeper decisions)
+  behaves correctly for every completion order, for concurrent completions, and for duplicates.
+- Against real Postgres + Redis + BullMQ, duplicate delivery doesn't create duplicate snapshots,
+  and a category that exhausts its retries ends the run instead of hanging.
+- The score formula matches the documented weights, caps and edge cases.
+- Each original bug, if re-introduced, is caught.
+
+**What they do NOT prove (be upfront about this)**
+
+- **The five analyses themselves are untested.** Complexity (a regex heuristic), dead-code
+  detection, `npm audit` parsing, lcov parsing and drift embeddings are replaced by fakes.
+  Nothing checks that they produce *correct* numbers.
+- **No real process crash.** "Crashed between advance and enqueue" is simulated by putting the
+  database in that state and running the sweeper. No test kills a worker mid-job with SIGKILL, so
+  BullMQ's stalled-job detection is assumed, not tested.
+- **The sweeper's real BullMQ states are only partly tested.** Coordination tests use fake states
+  (`failed`, `active`, missing). The integration test uses real BullMQ for retries and dedupe, but
+  not for "stalled more than allowable limit".
+- **Concurrency is "many promises in one Node process".** They share one Prisma connection pool,
+  so real parallel transactions do happen in Postgres. But this isn't several worker *processes*
+  on several machines.
+- **No GitHub, no HTTP routes, no Socket.IO, no dashboard.** `POST /api/analyze` isn't exercised
+  through Express, only the `fanOutPublic` function it calls.
+- **Timing thresholds** (2 / 10 / 60 minutes) are tested by passing a fake `now`, not by waiting.
+- Passing on a laptop and in CI doesn't prove behavior under production load or with Neon's
+  pgBouncer pooling.
+
+**How to run**
+```bash
+docker compose up -d        # Postgres on 5433, Redis on 6379
+cd worker && npm test       # creates/migrates codepulse_test, then runs all 39 tests (~6–12 s)
+```
