@@ -1,7 +1,5 @@
 import { fetchFile } from "../lib/fetchFile.js";
-import { storeWorkerResult } from '../resultStore.js';
 import Redis from 'ioredis';
-import { Queue } from 'bullmq';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, mkdir, rm } from 'fs/promises';
@@ -66,13 +64,6 @@ export const processVuln = async (job) => {
         ...vulnCounts,
     };
 
-    const { complete, results: allResults } = await storeWorkerResult(repoId, commitSha, 'vuln', finalReport, job.data.runId);
-
-    if (complete) {
-        const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
-        await aggregatorQueue.add('aggregate', { runId: job.data.runId, repoId, commitSha, owner, repoName, results: allResults }, { attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
-        console.log(`[vuln] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
-    }
 
     await redis.publish('codepulse:worker-event', JSON.stringify({
         repoId,

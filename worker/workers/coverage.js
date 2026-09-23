@@ -1,7 +1,5 @@
 import { fetchFile } from '../lib/fetchFile.js';
 import prisma from '../../api/lib/prisma.js';
-import { storeWorkerResult } from '../resultStore.js';
-import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 
 const redis = new Redis(process.env.REDIS_URL);
@@ -77,13 +75,6 @@ export const processCoverage = async (job) => {
     hasLcov: coverageRatio !== null,
   };
 
-  const { complete, results: allResults } = await storeWorkerResult(repoId, commitSha, 'coverage', finalReport, job.data.runId);
-
-  if (complete) {
-    const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
-    await aggregatorQueue.add('aggregate', { runId: job.data.runId, repoId, commitSha, owner, repoName, results: allResults }, { attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
-    console.log(`[coverage] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
-  }
   await redis.publish('codepulse:worker-event', JSON.stringify({
     repoId,
     commitSha,

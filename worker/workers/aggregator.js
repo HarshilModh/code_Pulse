@@ -3,20 +3,35 @@ import prisma from '../../api/lib/prisma.js';
 import Redis from 'ioredis';
 import { postPRComment } from '../../api/services/prComment.js'
 import { markRunSucceeded, markRunFailed, isFinalAttempt, loadCategoryResults, claimPrComment, upsertRunSnapshot } from '../lib/runLifecycle.js';
+import { CATEGORIES } from '../lib/queues.js';
 const redis=new Redis(process.env.REDIS_URL);
 const insightsQueue=new Queue('insights-queue',{connection:redis});
 
 
 export const processAggregator = async (job) => {
-    const {runId,repoId,commitSha,owner,repoName}=job.data;
+    // The job carries only runId; everything else is read from Postgres. That's what lets the
+    // sweeper re-enqueue aggregation knowing nothing but the run's id.
+    const { runId } = job.data;
     try {
-        // With a run, Postgres (CategoryResult) is the source of truth; the results embedded
-        // in the job payload are only used for legacy jobs enqueued before AnalysisRun existed.
-        const results = runId ? await loadCategoryResults(runId) : job.data.results;
-        const missing = ['complexity','vuln','deadcode','coverage','drift'].filter(c => !results[c]);
-        // Throwing lets BullMQ retry; the category rows are written before the handoff, so
-        // this should never fire — if it does, it's a bug worth failing loudly on.
+        const run = await prisma.analysisRun.findUnique({ where: { id: runId }, select: { repoId: true, commitSha: true, status: true } });
+        if (!run) return { skipped: 'run not found' };
+        if (run.status === 'FAILED') return { skipped: 'run already FAILED' };
+        const { repoId, commitSha } = run;
+
+        const rows = await loadCategoryResults(runId);
+        const missing = CATEGORIES.filter(c => !rows[c]);
+        // The handoff only advances a run once all five rows exist, so this means a bug:
+        // throw so BullMQ retries and, on the last attempt, the run is marked FAILED.
         if (missing.length) throw new Error(`missing category results: ${missing.join(', ')}`);
+
+        // A category that failed permanently ends the run as FAILED (no snapshot) instead of
+        // leaving it waiting forever. Deterministic, so no point throwing to retry.
+        const failed = CATEGORIES.filter(c => rows[c].status === 'FAILED');
+        if (failed.length) {
+            await markRunFailed(runId, `categories failed: ${failed.map(c => `${c} (${rows[c].error})`).join('; ')}`);
+            return { failedCategories: failed };
+        }
+        const results = Object.fromEntries(CATEGORIES.map(c => [c, rows[c].report]));
         const {complexity,vuln,deadcode,coverage,drift}=results;
         const complexityPenalty= Math.min((complexity.avgComplexity / 10) * 100, 100);     
         const vulnPenalty       = Math.min((vuln.critical ?? 0) * 10 + (vuln.high ?? 0) * 5 + (vuln.moderate ?? 0) * 2, 100);                                                                 
@@ -44,9 +59,7 @@ export const processAggregator = async (job) => {
     };
   // Keyed on the run: a second aggregation of the same run gets the existing snapshot back,
   // so every later step (insights, cluster, findings) sees the same snapshot.id.
-  const snapshot = runId
-    ? await upsertRunSnapshot(runId, snapshotData)
-    : await prisma.snapshot.create({ data: snapshotData });
+  const snapshot = await upsertRunSnapshot(runId, snapshotData);
 
   // jobId = snapshot.id: a re-run aggregation re-adds the same id, which BullMQ ignores
   await insightsQueue.add('insights', { snapshotId: snapshot.id }, { jobId: snapshot.id });
@@ -67,7 +80,7 @@ export const processAggregator = async (job) => {
   const settings = await prisma.repoSettings.findUnique({ where: { repoId } });
   const prEnabled = (settings?.alertRules ?? []).some(r => r.type === 'pr_comments' && r.enabled);
   // Comments are visible to humans, so they get an at-most-once claim (see claimPrComment)
-  if (prEnabled && (!runId || await claimPrComment(runId))) {
+  if (prEnabled && await claimPrComment(runId)) {
     await postPRComment({ repoId, snapshotId: snapshot.id }).catch(err => {
       console.error('[aggregator] Error posting PR comment:', err.message);
     });

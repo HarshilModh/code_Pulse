@@ -1,9 +1,7 @@
 import { fetchFile } from '../lib/fetchFile.js';
 import { fetchRepoTree } from '../lib/fetchRepoTree.js';
 import prisma from '../../api/lib/prisma.js';
-import { storeWorkerResult } from '../resultStore.js';
 import Redis from 'ioredis';
-import { Queue } from 'bullmq';
 
 const redis = new Redis(process.env.REDIS_URL);
 const JS_TS = /\.(js|jsx|ts|tsx)$/;
@@ -122,13 +120,6 @@ export const processDeadCode = async (job) => {
       deadCodeRatio,
     };
 
-    const { complete, results: allResults } = await storeWorkerResult(repoId, commitSha, 'deadcode', finalReport, job.data.runId);
-
-    if (complete) {
-      const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
-      await aggregatorQueue.add('aggregate', { runId: job.data.runId, repoId, commitSha, owner, repoName, results: allResults }, { attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
-      console.log(`[deadcode] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
-    }
 
     await redis.publish('codepulse:worker-event', JSON.stringify({
       repoId,

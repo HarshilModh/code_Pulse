@@ -1,9 +1,7 @@
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import prisma from '../lib/prisma.js';
 
 const connection = { url: process.env.REDIS_URL };
-const redis = new Redis(process.env.REDIS_URL);
 
 const queues = {
   complexity: new Queue('complexity-queue', { connection }),
@@ -25,9 +23,6 @@ async function createRunAndEnqueue(payload) {
   const run = await prisma.analysisRun.create({
     data: { repoId: payload.repoId, commitSha: payload.commitSha },
   });
-
-  // Still used by resultStore until Step 3 replaces the Redis hash handoff
-  await redis.del(`codepulse:results:${payload.repoId}:${payload.commitSha}`);
 
   try {
     await Promise.all(

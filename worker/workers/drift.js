@@ -1,9 +1,7 @@
 import { fetchFile } from "../lib/fetchFile.js";
 import prisma from "../../api/lib/prisma.js";
-import { storeWorkerResult } from "../resultStore.js";
 import {embedText} from "../../api/services/embed.js";
 import Redis from "ioredis";
-import { Queue } from "bullmq";
 
 const redis = new Redis(process.env.REDIS_URL);
 export const processDrift=async(job)=>{
@@ -74,13 +72,6 @@ export const processDrift=async(job)=>{
             driftRatio,                                                                                                                                                                         
         };
                                                                                                                                                                                         
-        const { complete, results: allResults } = await storeWorkerResult(repoId, commitSha, 'drift', finalReport, job.data.runId);                                                                           
-   
-        if (complete) {                                                                                                                                                                                     
-            const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });                                                                              
-            await aggregatorQueue.add('aggregate', { runId: job.data.runId, repoId, commitSha, owner, repoName, results: allResults }, { attempts: 5, backoff: { type: 'exponential', delay: 2000 } });                                                                                
-            console.log(`[drift] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);                                                                                       
-        }                                                                                                                                                                                     
         await redis.publish('codepulse:worker-event', JSON.stringify({
             repoId,
             commitSha,
