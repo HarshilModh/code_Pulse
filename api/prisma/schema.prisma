@@ -43,7 +43,38 @@ model Repo {
   settings            RepoSettings?
   findings            Finding[]
   clusters            Cluster[]
+  analysisRuns        AnalysisRun[]
   @@unique([userId, githubRepoId])
+}
+
+// Lifecycle of one analysis request. A Postgres enum (not a free-form String like
+// Finding.status) so the database itself rejects typos such as 'SUCEEDED'.
+enum AnalysisRunStatus {
+  QUEUED       // row created, category jobs enqueued, no worker has started yet
+  RUNNING      // at least one category worker has picked up a job
+  AGGREGATING  // all five categories reported, aggregation job enqueued (Step 3)
+  SUCCEEDED
+  PARTIAL      // finished, but some category failed or skipped files (Step 4)
+  FAILED
+}
+
+// One row per analysis request: the durable record that a run happened and where it is.
+// Before this, the only trace of an in-flight run was a Redis hash with a 24h TTL.
+model AnalysisRun {
+  id         String            @id @default(cuid())
+  repoId     String
+  repo       Repo              @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  commitSha  String
+  status     AnalysisRunStatus @default(QUEUED)
+  error      String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([repoId, createdAt])
+  // Step 3's periodic check looks for runs stuck in a status for too long
+  @@index([status, updatedAt])
 }
 
 model Snapshot {

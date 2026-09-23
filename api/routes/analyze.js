@@ -50,7 +50,7 @@ router.post('/analyze', async (req, res) => {
         });
 
         // Fan out to all 5 workers
-        await fanOutPublic({
+        const runId = await fanOutPublic({
             repoId: repo.id,
             owner,
             repoName,
@@ -59,7 +59,8 @@ router.post('/analyze', async (req, res) => {
             changedFiles,
         });
 
-        res.json({ repoId: repo.id, commitSha: sha });
+        // runId lets the client track this specific run (status endpoint in Step 5)
+        res.json({ repoId: repo.id, commitSha: sha, runId });
     } catch (err) {
         console.error('[analyze]', err);
         res.status(500).json({ error: err.message });

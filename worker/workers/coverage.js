@@ -81,7 +81,7 @@ export const processCoverage = async (job) => {
 
   if (complete) {
     const aggregatorQueue = new Queue('aggregator-queue', { connection: { url: process.env.REDIS_URL } });
-    await aggregatorQueue.add('aggregate', { repoId, commitSha, owner, repoName, results: allResults });
+    await aggregatorQueue.add('aggregate', { runId: job.data.runId, repoId, commitSha, owner, repoName, results: allResults });
     console.log(`[coverage] All workers done — triggering aggregator for ${commitSha.slice(0, 8)}`);
   }
   await redis.publish('codepulse:worker-event', JSON.stringify({

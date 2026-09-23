@@ -2,12 +2,13 @@ import {Queue} from 'bullmq';
 import prisma from '../../api/lib/prisma.js';
 import Redis from 'ioredis';
 import { postPRComment } from '../../api/services/prComment.js'
+import { markRunSucceeded, markRunFailed } from '../lib/runLifecycle.js';
 const redis=new Redis(process.env.REDIS_URL);
 const insightsQueue=new Queue('insights-queue',{connection:redis});
 
 
 export const processAggregator = async (job) => {
-    const {repoId,commitSha,owner,repoName,results}=job.data;
+    const {runId,repoId,commitSha,owner,repoName,results}=job.data;
     try {
         const {complexity,vuln,deadcode,coverage,drift}=results;
         const complexityPenalty= Math.min((complexity.avgComplexity / 10) * 100, 100);     
@@ -78,9 +79,13 @@ export const processAggregator = async (job) => {
         phase: 'done',
         healthScore,
     }));
+    await markRunSucceeded(runId);
     return {healthScore,snapshotId:snapshot.id}                                                   
     } catch (error) {
       console.error('[aggregator] Fatal error:', error.message);
+      // The aggregator job currently has a single attempt, so this failure is final.
+      // (Step 2 adds retries; then only the last attempt should mark the run FAILED.)
+      await markRunFailed(runId, error.message).catch(e => console.error('[aggregator] could not mark run FAILED:', e.message));
       throw error;
     }
 }
