@@ -14,6 +14,7 @@
 
 ## Contents
 
+- [Architecture](#architecture)
 - [The problem](#the-problem)
 - [At a glance](#at-a-glance)
 - [What happens on a push](#what-happens-on-a-push)
@@ -22,13 +23,36 @@
 - [AI agents](#ai-agents)
 - [MCP server](#mcp-server)
 - [Dashboard and product features](#dashboard-and-product-features)
-- [Architecture](#architecture)
 - [Engineering decisions](#engineering-decisions)
 - [Testing](#testing)
 - [Tech stack](#tech-stack)
 - [Results](#results)
 - [Run it locally](#run-it-locally)
 - [Repository layout](#repository-layout)
+
+## Architecture
+
+![Architecture](CODEPULSE_ARCHITECTURE.png)
+
+```mermaid
+flowchart LR
+  GH[GitHub push webhook] -->|HMAC verified| API[Express 5 API]
+  API -->|AnalysisRun + 5 jobs| Q[[BullMQ on Redis]]
+  Q --> W1[complexity]
+  Q --> W2[vulnerabilities]
+  Q --> W3[dead code]
+  Q --> W4[coverage]
+  Q --> W5[drift via pgvector]
+  W1 & W2 & W3 & W4 & W5 -->|CategoryResult| AGG[aggregator<br/>score and findings]
+  AGG --> DB[(PostgreSQL + pgvector)]
+  AGG --> INS[GPT insights]
+  AGG --> CL[K-Means clusters]
+  AGG --> PR[Check Run + PR comment]
+  AGG -->|Redis Pub/Sub| API
+  API -->|Socket.IO| UI[Next.js 16 dashboard]
+  SW[sweeper] -.recovers stuck runs.-> Q
+  MCP[MCP server] --> DB
+```
 
 ## The problem
 
@@ -124,30 +148,6 @@ API keys are created in the dashboard and stored only as SHA-256 hashes.
 - **Plans** with Stripe billing: Free (3 repos), Pro (10 repos) and Team (50 repos).
 - **Email digests** through Resend, sent daily or weekly.
 - **Auth** with Clerk.
-
-## Architecture
-
-![Architecture](CODEPULSE_ARCHITECTURE.png)
-
-```mermaid
-flowchart LR
-  GH[GitHub push webhook] -->|HMAC verified| API[Express 5 API]
-  API -->|AnalysisRun + 5 jobs| Q[[BullMQ on Redis]]
-  Q --> W1[complexity]
-  Q --> W2[vulnerabilities]
-  Q --> W3[dead code]
-  Q --> W4[coverage]
-  Q --> W5[drift via pgvector]
-  W1 & W2 & W3 & W4 & W5 -->|CategoryResult| AGG[aggregator<br/>score and findings]
-  AGG --> DB[(PostgreSQL + pgvector)]
-  AGG --> INS[GPT insights]
-  AGG --> CL[K-Means clusters]
-  AGG --> PR[Check Run + PR comment]
-  AGG -->|Redis Pub/Sub| API
-  API -->|Socket.IO| UI[Next.js 16 dashboard]
-  SW[sweeper] -.recovers stuck runs.-> Q
-  MCP[MCP server] --> DB
-```
 
 ## Engineering decisions
 
