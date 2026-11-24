@@ -128,7 +128,7 @@ code_Pulse/
 │   │   ├── repos.js              # CRUD for repositories
 │   │   ├── findings.js           # Findings CRUD + triage
 │   │   ├── chat.js               # AI chat with tool-calling
-│   │   ├── search.js             # Global ⌘K search (repos, findings, semantic)
+│   │   ├── search.js             # Global search (route not mounted yet)
 │   │   ├── badge.js              # Public SVG health badge
 │   │   ├── webhook.js            # GitHub push webhook handler
 │   │   ├── demo.js               # Demo repository fork
@@ -160,9 +160,9 @@ code_Pulse/
 ├── worker/                       # BullMQ consumer workers
 │   ├── index.js                  # Entry point: registers all workers + cron
 │   ├── workers/
-│   │   ├── complexity.js         # Cyclomatic complexity analysis (escomplex)
+│   │   ├── complexity.js         # Cyclomatic complexity (branch and operator count)
 │   │   ├── vuln.js               # Vulnerability scanning (npm audit)
-│   │   ├── deadcode.js           # Dead code detection (ts-prune)
+│   │   ├── deadcode.js           # Dead code: exports nothing imports
 │   │   ├── coverage.js           # Test coverage analysis
 │   │   ├── drift.js              # Architectural drift (pgvector embeddings)
 │   │   ├── aggregator.js         # Score aggregation + snapshot + findings
@@ -253,11 +253,6 @@ All authenticated endpoints require a `Authorization: Bearer <clerk_jwt>` header
 | `POST` | `/api/repos/:id/agents/debate` | Start an AI debate on a topic (SSE stream) |
 | `POST` | `/api/repos/:id/agents/root-cause` | Run root cause analysis (SSE stream) |
 | `POST` | `/api/repos/:id/agents/tour` | Generate a codebase tour (SSE stream) |
-
-### Search
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/search?q=<term>` | Global search (repos, findings, semantic files) |
 
 ### Public
 | Method | Endpoint | Description |
