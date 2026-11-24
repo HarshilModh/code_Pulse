@@ -1,0 +1,46 @@
+name: Worker tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: codepulse
+          POSTGRES_PASSWORD: codepulse
+          POSTGRES_DB: codepulse_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U codepulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      TEST_DATABASE_URL: postgresql://codepulse:codepulse@localhost:5433/codepulse_test
+      TEST_REDIS_URL: redis://localhost:6379/15
+      OPENAI_API_KEY: test-key-not-used
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: api
+        run: npm ci && npx prisma generate
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Run worker tests
+        working-directory: worker
+        run: npm test
